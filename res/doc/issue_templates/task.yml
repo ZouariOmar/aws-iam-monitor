@@ -1,0 +1,34 @@
+name: Task
+description: General development task or refactor
+title: "[Task]: "
+labels: ["task"]
+
+body:
+    - type: textarea
+      id: goal
+      attributes:
+          label: Goal
+          description: What needs to be done?
+      validations:
+          required: true
+
+    - type: textarea
+      id: scope
+      attributes:
+          label: Scope
+          description: What is included / excluded?
+
+    - type: textarea
+      id: acceptance
+      attributes:
+          label: Acceptance Criteria
+          description: Define done conditions
+          placeholder: |
+              - [ ] Feature works
+              - [ ] Tests pass
+              - [ ] Reviewed
+
+    - type: textarea
+      id: notes
+      attributes:
+          label: Notes

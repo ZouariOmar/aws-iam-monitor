@@ -1,0 +1,30 @@
+name: Security Vulnerability
+description: Report a security issue privately
+title: "[Security]: "
+labels: ["security"]
+
+body:
+    - type: markdown
+      attributes:
+          value: |
+              Do NOT share sensitive security issues publicly.
+              For critical vulnerabilities, consider private disclosure.
+
+    - type: textarea
+      id: vulnerability
+      attributes:
+          label: Vulnerability Description
+          description: What is the issue?
+      validations:
+          required: true
+
+    - type: textarea
+      id: impact
+      attributes:
+          label: Impact
+          description: What could an attacker do?
+
+    - type: textarea
+      id: reproduction
+      attributes:
+          label: Steps to Reproduce

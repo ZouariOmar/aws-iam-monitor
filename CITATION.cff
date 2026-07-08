@@ -1,0 +1,25 @@
+cff-version: 1.2.0
+title: "aws-iam-monitor"
+message: "If you use this project, please cite it using the metadata below."
+type: software
+
+authors:
+  - family-names: "Zouari"
+    given-names: "Omar"
+
+repository-code: "https://github/ZouariOmar/aws-iam-monitor"
+url: "https://github/ZouariOmar/aws-iam-monitor"
+
+abstract: >
+  Generic open-source project template.
+
+keywords:
+  - template
+  - open-source
+  - automation
+  - docker
+
+license: Apache-2.0
+version: "0.1.0"
+
+date-released: 2026-07-08

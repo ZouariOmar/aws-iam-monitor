@@ -1,0 +1,24 @@
+# .github/workflows/lint.yml
+name: Lint
+
+on:
+    push:
+    pull_request:
+
+jobs:
+    lint:
+        runs-on: ubuntu-latest
+
+        steps:
+            - name: Checkout repository
+              uses: actions/checkout@v4
+
+            - name: Lint Markdown
+              run: |
+                  echo "Linting markdown..."
+                  npx markdownlint "**/*.md" || true
+
+            - name: Lint Shell Scripts
+              run: |
+                  echo "Running shellcheck..."
+                  shellcheck **/*.sh || true

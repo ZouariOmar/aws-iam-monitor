@@ -1,0 +1,76 @@
+# ----------------------------------------------------------------------
+# 1. DEFAULT LINE ENDINGS BEHAVIOR
+# ----------------------------------------------------------------------
+# Handle line endings automatically for text files.
+# Force LF (Unix style) on check-in.
+* text=auto
+
+# ----------------------------------------------------------------------
+# 2. CODE AND TEXT FILES (FORCE LF)
+# ----------------------------------------------------------------------
+# Ensure source files always use Unix-style line endings.
+*.js text eol=lf
+*.jsx text eol=lf
+*.ts text eol=lf
+*.tsx text eol=lf
+*.py text eol=lf
+*.go text eol=lf
+*.java text eol=lf
+*.c text eol=lf
+*.cpp text eol=lf
+*.h text eol=lf
+*.cs text eol=lf
+*.sh text eol=lf
+
+# ----------------------------------------------------------------------
+# 3. DOCUMENTATION AND CONFIGS (FORCE LF)
+# ----------------------------------------------------------------------
+*.md text eol=lf
+*.txt text eol=lf
+*.json text eol=lf
+*.yml text eol=lf
+*.yaml text eol=lf
+*.xml text eol=lf
+*.html text eol=lf
+*.css text eol=lf
+*.scss text eol=lf
+
+# ----------------------------------------------------------------------
+# 4. WINDOWS SPECIFIC FILES (FORCE CRLF)
+# ----------------------------------------------------------------------
+# Windows scripts must preserve CRLF to execute properly.
+*.bat text eol=crlf
+*.cmd text eol=crlf
+*.sln text eol=crlf
+
+# ----------------------------------------------------------------------
+# 5. BINARY FILES (DO NOT ENFORCE TEXT AUTO)
+# ----------------------------------------------------------------------
+# Explicitly mark images and binaries so Git does not corrupt them.
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.gif binary
+*.ico binary
+*.pdf binary
+*.zip binary
+*.gz binary
+
+# ----------------------------------------------------------------------
+# 6. OPTIONAL: GIT LARGE FILE STORAGE (LFS)
+# ----------------------------------------------------------------------
+# Uncomment these if you use Git LFS for massive media assets.
+# *.psd filter=lfs diff=lfs merge=lfs -text
+# *.mp4 filter=lfs diff=lfs merge=lfs -text
+
+# ----------------------------------------------------------------------
+# 7. GITHUB / GITLAB ARCHIVE & REPO VISUALS
+# ----------------------------------------------------------------------
+# Hide lockfiles or generated code from pull request diffs.
+package-lock.json linguist-generated=true
+yarn.lock linguist-generated=true
+
+# Exclude configuration files when running 'git archive' (ZIP exports).
+.github/ export-ignore
+.gitignore export-ignore
+.gitattributes export-ignore

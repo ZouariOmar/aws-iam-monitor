@@ -1,0 +1,9 @@
+blank_issues_enabled: false
+
+contact_links:
+    - name: Documentation
+      url: https://github/ZouariOmar/aws-iam-monitor
+      about: Check documentation before opening an issue.
+    - name: Discussions
+      url: https://github/ZouariOmar/aws-iam-monitor/discussions
+      about: Ask questions or share ideas here.
