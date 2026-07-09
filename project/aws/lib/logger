@@ -1,0 +1,76 @@
+#!/usr/bin/env bash
+# =========================================
+# .FILE
+#   logger
+#
+# .SYNOPSIS
+#   Logging utility functions for AWS IAM Monitor scripts
+#
+# .DESCRIPTION
+#   Provides a reusable logging function with different
+#   message levels and terminal formatting.
+#
+# .PARAMETER type
+#   Log message type:
+#     INFO
+#     SUCCESS
+#     WARNING
+#     ERROR
+#     DEBUG
+#
+# .PARAMETER message
+#   Message content to display.
+#
+# .INPUTS
+#   Log type and message string.
+#
+# .OUTPUTS
+#   Prints formatted log messages to stdout/stderr.
+#
+# .NOTES
+#   Project       : aws-iam-monitor
+#   Version       : 1.0
+#   Author        : @ZouariOmar (zouariomar20@gmail.com)
+#   Created       : 08/07/2026
+#   Change Log    : 1.0 Initial release
+#
+# .EXAMPLE
+#   source lib/logger
+#
+#   msg INFO "Starting IAM setup"
+#   msg SUCCESS "User created successfully"
+#   msg ERROR "Failed to create role"
+#
+# shellcheck disable=SC1091
+# =========================================
+
+set -e
+
+# Load colors
+[[ -s "$HOME/.bash/.bash_colors" ]] || {
+  echo "Installing bash_colors..."
+  mkdir -p "$HOME/.bash"
+  curl -fsSL "https://raw.githubusercontent.com/ZouariOmar/dot-files/refs/heads/main/dot-files/bash/.bash/.bash_colors" \
+    -o "$HOME/.bash/.bash_colors"
+}
+. "$HOME/.bash/.bash_colors"
+
+msg() {
+  if [[ $# -eq 1 ]]; then
+    echo -e "$WHITE$1$RESET"
+    return
+  fi
+
+  local type="$1"
+  shift
+
+  case "$type" in
+  INFO) color="$BLUE" ;;
+  SUCCESS) color="$GREEN" ;;
+  WARNING) color="$YELLOW" ;;
+  ERROR) color="$RED" ;;
+  DEBUG) color="$CYAN" ;;
+  esac
+
+  printf "%b[%s]%b %s\n" "$color" "$type" "$RESET" "$*"
+}
