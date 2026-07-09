@@ -1,0 +1,18 @@
+{
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Sid": "DeveloperAccess",
+      "Effect": "Allow",
+      "Action": [
+        "ec2:*",
+        "lambda:*",
+        "logs:*",
+        "cloudwatch:*",
+        "s3:*",
+        "iam:PassRole"
+      ],
+      "Resource": "*"
+    }
+  ]
+}

@@ -1,0 +1,58 @@
+#!/usr/bin/env bash
+# =========================================
+# .FILE
+#   requirements
+#
+# .SYNOPSIS
+#   Environment validation utilities
+#
+# .DESCRIPTION
+#   Checks required system commands and validates
+#   the local environment before running AWS IAM
+#   automation scripts.
+#
+# .PARAMETER command
+#   Command name to verify installation.
+#
+# .INPUTS
+#   List of required commands.
+#
+# .OUTPUTS
+#   Displays validation status messages.
+#   Exits with error if requirements are missing.
+#
+# .NOTES
+#   Project       : aws-iam-monitor
+#   Version       : 1.0
+#   Author        : @ZouariOmar (zouariomar20@gmail.com)
+#   Created       : 08/07/2026
+#   Change Log    : 1.0 Initial release
+#
+# .EXAMPLE
+#   source lib/requirements.sh
+#
+#   check_requirements aws python
+# =========================================
+
+set -e
+
+check_command() {
+  local CMD="$1"
+
+  if command -v "$CMD" >/dev/null 2>&1; then
+    msg SUCCESS "'$CMD' is installed"
+  else
+    msg ERROR "'$CMD' is not installed"
+    exit 1
+  fi
+}
+
+check_requirements() {
+  msg INFO "Checking required commands..."
+
+  for CMD in "$@"; do
+    check_command "$CMD"
+  done
+
+  msg SUCCESS "All required commands are available!"
+}
