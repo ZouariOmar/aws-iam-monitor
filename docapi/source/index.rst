@@ -30,10 +30,8 @@ accounts.
 Credits
 -------
 
-..
- contributors:: ZouariOmar/aws-iam-monitor
-  :avatar:
-..
+.. contributors:: ZouariOmar/aws-iam-monitor
+  :avatars:
 
 .. image:: _static/aws-iam-monitor-full-logo.png
   :alt: aws-iam-monitor-full-logo

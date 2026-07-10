@@ -11,16 +11,18 @@ PROJECT_VERSION ?= $(shell cat $(VERSION_FILE)) ## Current project version (read
 DOCAPI_DIR      ?= docapi## Project api Documentention
 
 # Commands
-BUILD_CMD      ?= echo "No build step configured"                                ## Build command
-RUN_CMD        ?= echo "No run step configured"                                  ## Run command
-TEST_CMD       ?= echo "No tests configured"                                     ## Test command
-LINT_CMD       ?= echo "No lint configured"                                      ## Lint command
-FORMAT_CMD     ?= echo "No formatter configured"                                 ## Format command
-DOCS_CMD       ?= make -C $(DOCAPI_DIR)                                          ## Docs generation command
-DOCS_SERVE_CMD ?= cd "$(DOCAPI_DIR)/build/html" && python -m http.server 8000    ## Serve docs commmand
-CHANGELOG_CMD  ?= git cliff -o CHANGELOG.md                                      ## Changelog command
-INIT_CMD       ?= uv venv .venv                                                  ## Init command
-SYNC_CMD       ?= uv sync                                                        ## Sync command
+BUILD_CMD        ?= echo "No build step configured"                                ## Build command
+RUN_CMD          ?= echo "No run step configured"                                  ## Run command
+TEST_CMD         ?= echo "No tests configured"                                     ## Test command
+LINT_CMD         ?= echo "No lint configured"                                      ## Lint command
+FORMAT_CMD       ?= echo "No formatter configured"                                 ## Format command
+DOCS_CMD         ?= make -C $(DOCAPI_DIR)                                          ## Docs generation command
+DOCS_SERVE_CMD   ?= cd "$(DOCAPI_DIR)/build/html" && python -m http.server 8000    ## Serve docs commmand
+DOCS_DEPLOY_CMD  ?= vercel --prod $(DOCAPI_DIR)/build/html                         ## Deploy docs command
+DOCS_PREVIEW_CMD ?= vercel $(DOCAPI_DIR)/build/html                                ## Preview docs command
+CHANGELOG_CMD    ?= git cliff -o CHANGELOG.md                                      ## Changelog command
+INIT_CMD         ?= uv venv .venv                                                  ## Init command
+SYNC_CMD         ?= uv sync                                                        ## Sync command
 
 # Docker
 DOCKER_IMAGE ?= $(PROJECT_NAME):latest ## Docker image name
@@ -106,6 +108,16 @@ format: ## Fromat the project
 
 .PHONY: docs
 docs: docs-html ## Document the project to html
+
+.PHONY: docs-deploy
+docs-deploy:
+	@$(call print_title,Deploy Documentation...)
+	@$(DOCS_DEPLOY_CMD)
+
+.PHONY: docs-preview
+docs-preview: docs-html
+	@$(call print_title,Preview Documentation...)
+	@$(DOCS_PREVIEW_CMD)
 
 .PHONY: docs-serve
 docs-serve: ## Serve the documentation
