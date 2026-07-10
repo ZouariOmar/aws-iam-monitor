@@ -1,80 +1,138 @@
-# Security Policy for aws-iam-monitor
+# Security Policy
 
 ## Supported Versions
 
-The aws-iam-monitor project provides security updates for the following versions:
+The following versions of **aws-iam-monitor** receive security updates.
 
-| Version | Supported          |
-| ------- | ------------------ |
-| 1.x.x   | :white_check_mark: |
-| 0.x.x   | :x:                |
+| Version | Supported |
+| ------- | :-------: |
+| 1.x.x   |    yes    |
+| 0.x.x   |    no     |
 
 ## Reporting a Vulnerability
 
-If you discover a security vulnerability in aws-iam-monitor, we encourage responsible disclosure. To report a vulnerability:
+If you discover a security vulnerability in **aws-iam-monitor**, please report it responsibly.
 
-1. **Contact us** via email at <zouariomar20@gmail.com> with the details.
-2. Please provide a detailed description of the issue, including steps to reproduce it and, if available, a proof of concept.
-3. We aim to respond within **48 hours** and will work closely with you to resolve the issue.
+### How to Report
 
-We appreciate the security community's efforts in helping us maintain aws-iam-monitor’s safety and integrity.
+Send an email to **<zouariomar20@gmail.com>** containing:
+
+- A description of the vulnerability
+- Steps to reproduce
+- The affected version
+- Any relevant logs or screenshots
+- A proof of concept (if available)
+
+Please **do not open a public GitHub issue** for security vulnerabilities.
+
+### Response Process
+
+We aim to:
+
+- Acknowledge your report within **48 hours**
+- Investigate and validate the issue
+- Keep you informed throughout the remediation process
+- Release a security fix as quickly as practical
+- Credit you for the disclosure (if desired)
 
 ## Security Practices
 
-aws-iam-monitor follows industry best practices for security to ensure safe transactions and protect user data:
+The project follows security best practices for AWS environments.
 
-### 1. **Authentication and Authorization**
+### Least Privilege
 
-- aws-iam-monitor uses secure methods for user authentication, including strong password hashing (e.g., bcrypt).
-- Access control is implemented to restrict unauthorized actions.
+- IAM policies grant only the permissions required.
+- Cross-account access should use read-only roles whenever possible.
+- AWS STS AssumeRole is recommended for organization-wide deployments.
 
-### 2. **Data Encryption**
+### Secure AWS Integrations
 
-- All sensitive data is encrypted in transit (via HTTPS/TLS) and at rest, including user credentials and personal information.
+aws-iam-monitor relies on AWS managed services including:
 
-### 3. **SQL Injection Protection**
+- AWS CloudTrail
+- Amazon EventBridge
+- AWS Lambda
+- Amazon SNS
+- Amazon S3
+- Amazon CloudWatch
+- AWS STS
 
-- Parameterized queries and prepared statements are used throughout to prevent SQL injection.
-- ORM (Object-Relational Mapping) is leveraged where possible.
+These services should be configured according to AWS security best practices.
 
-### 4. **Cross-Site Scripting (XSS) Prevention**
+### Data Protection
 
-- User inputs are sanitized and validated to prevent XSS attacks, and user-generated content is escaped to avoid code injection.
+- Communication with AWS APIs uses HTTPS/TLS.
+- Audit reports stored in Amazon S3 should use encryption at rest.
+- Sensitive configuration should never be committed to the repository.
 
-### 5. **Cross-Site Request Forgery (CSRF) Protection**
+### Secrets Management
 
-- CSRF tokens are included in forms and API requests to secure user actions.
+Never commit:
 
-### 6. **Third-Party Dependency Management**
+- AWS Access Keys
+- Secret Access Keys
+- Session Tokens
+- `.env` files
+- Private certificates
+- Customer data
 
-- Dependencies are regularly scanned for vulnerabilities with tools such as [OWASP Dependency-Check](https://owasp.org/www-project-dependency-check/).
-- Critical security patches for dependencies are applied promptly.
+Use one of the following instead:
 
-### 7. **Secure Configuration**
+- IAM Roles
+- AWS Secrets Manager
+- AWS Systems Manager Parameter Store
+- Environment variables
 
-- Default settings follow secure configurations, and sensitive data is stored securely (e.g., `.env` files for environment-specific settings).
+### Logging
 
-### 8. **Content Security Policy (CSP)**
+aws-iam-monitor records IAM activity for auditing purposes.
 
-- A strict CSP is enforced to limit content sources, reducing the risk of XSS and unauthorized resource loading.
+Logs should:
 
-### 9. **Monitoring and Logging**
+- Exclude secrets and credentials
+- Be retained according to organizational policies
+- Be monitored for suspicious activity
 
-- Logs are maintained for key operations and monitored for abnormal patterns. Logs avoid storing sensitive information.
+### Dependency Management
+
+Dependencies should be kept up to date.
+
+Recommended tools include:
+
+- Dependabot
+- `pip-audit`
+- `uv`
+- GitHub Dependabot Alerts
 
 ## Security Contributions
 
-Contributors can help enhance aws-iam-monitor's security by following these practices:
+Contributors can help improve security by:
 
-- Adhere to secure coding standards and the above security practices when contributing.
-- Conduct thorough security testing before submitting a pull request.
-- Avoid including any sensitive data in code (e.g., passwords, API keys).
+- Following secure coding practices
+- Validating all external input
+- Avoiding hard-coded credentials
+- Using least-privilege IAM permissions
+- Reviewing dependency updates
+- Testing security-sensitive changes before submitting pull requests
+
+## AWS Security Recommendations
+
+For production deployments, we recommend:
+
+- Enable AWS CloudTrail in all regions.
+- Enable S3 bucket encryption.
+- Enable CloudWatch log retention.
+- Use SNS encryption where appropriate.
+- Enable MFA for privileged AWS accounts.
+- Rotate IAM credentials regularly.
+- Use dedicated monitoring accounts within AWS Organizations.
 
 ## Resources
 
-For additional guidance on secure development, refer to:
+- AWS Well-Architected Framework – Security Pillar
+- AWS IAM Best Practices
+- AWS Security Best Practices
+- OWASP Secure Coding Practices Checklist
+- CWE Top 25 Most Dangerous Software Weaknesses
 
-- [OWASP Secure Coding Practices Checklist](https://cheatsheetseries.owasp.org/cheatsheets/Secure_Coding_Practices_Checklist.html)
-- [CWE Top 25 Most Dangerous Software Errors](https://cwe.mitre.org/top25/)
-
-Thank you for helping us make aws-iam-monitor secure for our users and the community!
+Thank you for helping keep **aws-iam-monitor** secure.

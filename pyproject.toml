@@ -1,0 +1,67 @@
+[project]
+name = "aws-iam-monitor"
+
+version = "0.1.0"
+
+description = "Monitor, Audit, Protect, Real-time visibility into AWS IAM changes and access control activity"
+
+readme = "README.md"
+
+license = "Apache-2.0"
+
+authors = [ { name = "Zouari Omar" } ]
+
+requires-python = ">=3.14"
+
+keywords = [
+  "aws",
+  "iam",
+  "automation",
+  "workflow-engine",
+  "async",
+  "api",
+  "server",
+  "tooling"
+]
+
+classifiers = [
+  "Development Status :: 4 - Beta",
+  "Intended Audience :: Developers",
+  "Intended Audience :: Information Technology",
+  "Intended Audience :: System Administrators",
+  "Programming Language :: Python :: 3",
+  "Operating System :: OS Independent",
+  "Framework :: AsyncIO",
+  "Topic :: Software Development :: Libraries",
+  "Topic :: Internet :: WWW/HTTP :: HTTP Servers",
+  "Topic :: System :: Distributed Computing",
+  "Topic :: System :: Systems Administration"
+]
+
+dependencies = [
+]
+
+[dependency-groups]
+dev = [
+  "sphinx>=9.1.0",
+  "sphinx-contributors>=0.3.0",
+  "sphinx-rtd-theme>=3.1.0",
+  "sphinxcontrib-mermaid>=2.0.3",
+  "sphinx-iconify>=0.3.0",
+]
+
+[project.urls]
+Homepage = "https://github.com/nZouariOmar/aws-iam-monitor"
+Documentation = "https://github.com/ZouariOmar/aws-iam-monitor/docapi"
+Repository = "https://github.com/ZouariOmar/aws-iam-monitor"
+Issues = "https://github.com/ZouariOmar/aws-iam-monitor/issues"
+
+[tool.uv]
+package = true
+
+[tool.setuptools.packages.find]
+include = ["project*"]
+exclude = [
+    "res*",
+    "docapi*",
+]
