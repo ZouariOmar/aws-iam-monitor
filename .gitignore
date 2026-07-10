@@ -1,6 +1,9 @@
 # See https://docs.github.com/get-started/getting-started-with-git/ignoring-files for more about ignoring files.
-# See https://github.com/github/gitignore - A collection of useful .gitignore templates 
+# See https://github.com/github/gitignore - A collection of useful .gitignore templates
 # Root .gitignore file
 
 ### CUSTOM IGNORES ###
-project/.env
+*/.env*
+*/build/
+*.egg-info/
+*.lock
