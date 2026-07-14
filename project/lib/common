@@ -1,0 +1,82 @@
+#!/usr/bin/env bash
+# =========================================
+# .FILE
+#   common
+#
+# .SYNOPSIS
+#   Common utility functions for IAM automation scripts
+#
+# .DESCRIPTION
+#   Provides shared helper functions used by IAMSentinel
+#   lifecycle scripts.
+#
+#   This library contains reusable functions for script
+#   loading, validation, and common runtime operations.
+#
+#   This script is part of IAMSentinel, a real-time AWS IAM
+#   auditing and monitoring project.
+#
+# .INPUTS
+#   Script paths passed to utility functions.
+#
+# .OUTPUTS
+#   Provides reusable shell functions to calling scripts.
+#
+# .NOTES
+#   Project       : aws-iam-monitor
+#   Version       : 1.0
+#   Author        : @ZouariOmar (zouariomar20@gmail.com)
+#   Created       : 14/07/2026
+#   Change Log    : 1.0 Initial release
+#
+# .EXAMPLE
+#   load_script "lib/logger"
+#
+# .REQUIREMENTS
+#   - Bash
+#   - Logger module loaded before using msg()
+#
+# shellcheck disable=SC1090
+# =========================================
+
+load_script() {
+  local SCRIPT="$1"
+  local VERBOSE="${2:-false}"
+
+  if [[ -s "$SCRIPT" ]]; then
+    . "$SCRIPT"
+
+    if [[ "$VERBOSE" == true ]]; then
+      msg SUCCESS "'$SCRIPT' Loaded successfully!"
+    fi
+
+  else
+    msg ERROR "Missing Script: '$SCRIPT'"
+    exit 1
+  fi
+}
+
+check_script() {
+  local SCRIPT="$1"
+
+  if [[ ! -x "$SCRIPT" ]]; then
+    msg ERROR "Missing or non-executable script: '$SCRIPT'"
+    exit 1
+  fi
+}
+
+run_script() {
+  local SCRIPT="$1"
+  check_script "$SCRIPT"
+
+  exec "$SCRIPT" "$AWS_ACCOUNT_ID" "$VERBOSE"
+}
+
+require_variable() {
+  local NAME="$1"
+
+  if [[ -z "${!NAME:-}" ]]; then
+    msg ERROR "Required variable '$NAME' is not set"
+    exit 1
+  fi
+}
