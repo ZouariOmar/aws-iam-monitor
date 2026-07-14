@@ -3,6 +3,7 @@
 # Root .gitignore file
 
 ### CUSTOM IGNORES ###
+*.venv/
 */.env*
 */build/
 *.egg-info/

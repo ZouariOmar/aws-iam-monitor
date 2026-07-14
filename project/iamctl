@@ -1,0 +1,191 @@
+#!/usr/bin/env bash
+# =========================================
+# .FILE
+#   iamctl
+#
+# .SYNOPSIS
+#   AWS IAM lifecycle management command
+#
+# .DESCRIPTION
+#   Provides a unified interface for managing
+#   IAM environment lifecycle operations.
+#
+#   Supports creating, updating, and removing IAM
+#   resources through simple lifecycle commands.
+#
+#   Supports verbose execution mode for displaying
+#   detailed lifecycle and debugging information.
+#
+#   This script is part of IAMSentinel, a real-time AWS IAM
+#   auditing and monitoring project.
+#
+# .INPUTS
+#   --up
+#       Creates and configures IAM users, roles,
+#       and policies.
+#
+#   --down
+#       Removes IAM users, roles, and policies
+#       created by the setup workflow.
+#
+#   -v, --verbose
+#       Enables verbose output including loaded modules,
+#       AWS account details, and execution information.
+#
+# .OUTPUTS
+#   Executes IAM lifecycle operations.
+#   Outputs execution logs to stdout.
+#
+# .NOTES
+#   Project       : aws-iam-monitor
+#   Version       : 1.0
+#   Author        : @ZouariOmar (zouariomar20@gmail.com)
+#   Created       : 14/07/2026
+#   Change Log    : 1.0 Initial release
+#
+# .EXAMPLE
+#   ./iamctl --up
+#
+#   ./iamctl --down
+#
+#   ./iamctl --up --verbose
+#
+#   ./iamctl --down -v
+#
+# .REQUIREMENTS
+#   - AWS CLI v2
+#   - Python
+#   - Configured AWS credentials
+#   - IAM permissions:
+#       Required permissions depend on selected action:
+#       --up     iam:Create*, iam:Attach*, iam:Update*
+#       --down   iam:Delete*, iam:Detach*
+#
+# shellcheck disable=SC1090
+# =========================================
+
+set -e
+
+# ========================
+# === Custom conf part ===
+# ========================
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+LIB_DIR="lib"
+IAM_SETUP="${SCRIPT_DIR}/iam_setup"
+IAM_TEARDOWN="${SCRIPT_DIR}/iam_teardown"
+VERBOSE=false
+AWS_ACCOUNT_ID=${AWS_ACCOUNT_ID:-}
+
+# =========================
+# === !Custom conf part ===
+# =========================
+
+check_aws_auth() {
+  msg INFO "Checking AWS credentials..."
+
+  if aws sts get-caller-identity >/dev/null 2>&1; then
+
+    AWS_ACCOUNT_ID=$(aws sts get-caller-identity \
+      --query Account \
+      --output text)
+
+    USER=$(aws sts get-caller-identity \
+      --query Arn \
+      --output text)
+
+    msg SUCCESS "AWS authentication successful"
+    if [[ "$VERBOSE" == true ]]; then
+      msg INFO "Account: $AWS_ACCOUNT_ID"
+      msg INFO "Identity: $USER"
+    fi
+
+  else
+    msg ERROR "AWS credentials are not configured"
+    msg INFO "Run: aws configure"
+    exit 1
+  fi
+}
+
+usage() {
+  cat <<EOF
+$(msg "USAGE:")
+  $(basename "$0") <command> [option]
+
+$(msg "COMMANDS:")
+  $(basename "$0") --up
+      Create or update IAM resources.
+
+  $(basename "$0") --down
+      Remove IAM resources.
+
+$(msg "OPTIONS:")
+
+   -v, --verbose
+      Enable verbose output.
+
+  -h, --help
+      Show this help message.
+
+$(msg "EXAMPLES:")
+
+  $(basename "$0") --up
+
+  $(basename "$0") --down
+
+  $(basename "$0") --up --verbose
+
+  $(basename "$0") --down -v
+EOF
+  exit 1
+}
+
+main() {
+  # Load `common`
+  if [[ -s "${LIB_DIR}/common" ]]; then
+    # shellcheck disable=SC1091
+    . "${LIB_DIR}/common"
+  else
+    echo "[ERROR] Missing Script: '${LIB_DIR}/common'"
+    exit 1
+  fi
+
+  while [[ $# -gt 0 ]]; do
+    case "$1" in
+    -v | --verbose)
+      VERBOSE=true
+      shift
+      ;;
+
+    *)
+      ACTION="$1"
+      shift
+      ;;
+    esac
+  done
+
+  load_script "${LIB_DIR}/logger" "$VERBOSE"
+
+  case "${ACTION:-}" in
+  --up)
+    check_aws_auth
+    run_script "$IAM_SETUP"
+    ;;
+
+  --down)
+    check_aws_auth
+    run_script "$IAM_TEARDOWN"
+    ;;
+
+  -h | --help)
+    usage
+    ;;
+
+  *)
+    msg ERROR "Unknown option: $ACTION"
+    usage
+    ;;
+  esac
+}
+
+main "$@"

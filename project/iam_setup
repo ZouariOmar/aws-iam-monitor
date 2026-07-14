@@ -1,0 +1,261 @@
+#!/usr/bin/env bash
+# =========================================
+# .FILE
+#   iam_setup
+#
+# .SYNOPSIS
+#   AWS IAM environment setup automation script
+#
+# .DESCRIPTION
+#   Creates and configures IAM users, roles, and policies
+#   from a CSV configuration file.
+#
+#   This script is part of IAMSentinel, a real-time AWS IAM
+#   auditing and monitoring project. It prepares IAM resources
+#   that generate CloudTrail events for security monitoring.
+#
+# .INPUTS
+#   users.csv
+#   policies/*.json
+#   lib/*
+#
+# .OUTPUTS
+#   Creates AWS IAM users, roles, and policies.
+#   Outputs execution logs to stdout.
+#
+# .NOTES
+#   Project       : aws-iam-monitor
+#   Version       : 1.0
+#   Author        : @ZouariOmar (zouariomar20@gmail.com)
+#   Created       : 08/07/2026
+#   Change Log    : 1.0 Initial release
+#
+# .EXAMPLE
+#   ./iam_setup
+#
+# .REQUIREMENTS
+#   - AWS CLI v2
+#   - Python
+#   - Configured AWS credentials
+#   - IAM permissions:
+#       iam:CreateUser
+#       iam:CreateRole
+#       iam:CreatePolicy
+#       iam:AttachUserPolicy
+#       iam:AttachRolePolicy
+#
+# shellcheck disable=SC1090
+# =========================================
+
+set -e
+
+# ========================
+# === Custom conf part ===
+# ========================
+
+USERS_CSV_FILE="users.csv"
+POLICY_DIR="policies"
+LIB_DIR="lib"
+AWS_ACCOUNT_ID="${1:-}"
+VERBOSE=${2:-false}
+
+# =========================
+# === !Custom conf part ===
+# =========================
+
+# Load `common`
+if [[ -s "${LIB_DIR}/common" ]]; then
+  # shellcheck disable=SC1091
+  . "${LIB_DIR}/common"
+else
+  echo "[ERROR] Missing Script: '${LIB_DIR}/common'"
+  exit 1
+fi
+
+# =====================
+# === AWS-IAM Setup ===
+# =====================
+
+# INFO: This function support policy create & update
+create_policy() {
+  local POLICY_NAME=$1
+  local POLICY_FILE="$POLICY_DIR/${POLICY_NAME}.json"
+  local POLICY_ARN="arn:aws:iam::${AWS_ACCOUNT_ID}:policy/${POLICY_NAME}"
+
+  if [[ ! -s "$POLICY_FILE" ]]; then
+    msg ERROR "Policy file missing or empty: $POLICY_FILE"
+    exit 1
+  fi
+
+  # Create policy if it doesn't exist
+  if ! aws iam get-policy --policy-arn "$POLICY_ARN" >/dev/null 2>&1; then
+
+    aws iam create-policy \
+      --policy-name "$POLICY_NAME" \
+      --policy-document "file://$POLICY_FILE" >/dev/null
+
+    if [[ "$VERBOSE" == true ]]; then
+      msg SUCCESS "Created Policy: $POLICY_NAME"
+    fi
+    return
+  fi
+
+  # Get current default version
+  local DEFAULT_VERSION
+  DEFAULT_VERSION=$(aws iam get-policy \
+    --policy-arn "$POLICY_ARN" \
+    --query 'Policy.DefaultVersionId' \
+    --output text)
+
+  # Normalize both JSON documents before comparison
+  # NOTE: I use `jq` for key ordering, `aws --output json` does not guarantee key ordering.
+  local CURRENT_POLICY_HASH
+  CURRENT_POLICY_HASH=$(
+    aws iam get-policy-version \
+      --policy-arn "$POLICY_ARN" \
+      --version-id "$DEFAULT_VERSION" |
+      jq -S '.PolicyVersion.Document' | sha256sum | cut -d' ' -f1
+  )
+
+  local NEW_POLICY_HASH
+  NEW_POLICY_HASH=$(jq -S . "$POLICY_FILE" | sha256sum | cut -d' ' -f1)
+
+  if [[ "$CURRENT_POLICY_HASH" == "$NEW_POLICY_HASH" ]]; then
+    msg INFO "Policy '$POLICY_NAME' is already up to date."
+    return
+  fi
+
+  msg INFO "Updating policy '$POLICY_NAME'..."
+
+  # IAM allows only 5 policy versions
+  local VERSION_COUNT
+  VERSION_COUNT=$(aws iam list-policy-versions \
+    --policy-arn "$POLICY_ARN" \
+    --query 'length(Versions)' \
+    --output text)
+
+  if [[ "$VERSION_COUNT" -ge 5 ]]; then
+    local OLDEST_VERSION
+    OLDEST_VERSION=$(aws iam list-policy-versions \
+      --policy-arn "$POLICY_ARN" \
+      --query 'Versions[?!IsDefaultVersion] | sort_by(@,&CreateDate)[0].VersionId' \
+      --output text)
+
+    aws iam delete-policy-version \
+      --policy-arn "$POLICY_ARN" \
+      --version-id "$OLDEST_VERSION"
+
+    [[ "$VERBOSE" == true ]] && msg INFO "Deleted old policy version: $OLDEST_VERSION"
+  fi
+
+  aws iam create-policy-version \
+    --policy-arn "$POLICY_ARN" \
+    --policy-document "file://$POLICY_FILE" \
+    --set-as-default
+
+  if [[ "$VERBOSE" == true ]]; then
+    msg SUCCESS "Updated Policy: $POLICY_NAME"
+  fi
+}
+
+create_role() {
+  local ROLE_NAME=$1
+  local POLICY_NAME=$2
+  local POLICY_ARN="arn:aws:iam::${AWS_ACCOUNT_ID}:policy/${POLICY_NAME}"
+
+  if aws iam get-role \
+    --role-name "$ROLE_NAME" >/dev/null 2>&1; then
+
+    msg INFO "Role exists: https://console.aws.amazon.com/iam/home#/roles/${ROLE_NAME}"
+
+  else
+    aws iam create-role \
+      --role-name "$ROLE_NAME" \
+      --assume-role-policy-document file://trust-policy.json \
+      >/dev/null
+
+    if [[ "$VERBOSE" == true ]]; then
+      msg SUCCESS "Created Role: https://console.aws.amazon.com/iam/home#/roles/${ROLE_NAME}"
+    fi
+  fi
+
+  if ! aws iam list-attached-role-policies \
+    --role-name "$ROLE_NAME" \
+    --query "AttachedPolicies[?PolicyArn=='$POLICY_ARN']" \
+    --output text | grep -q "$POLICY_ARN"; then
+
+    aws iam attach-role-policy \
+      --role-name "$ROLE_NAME" \
+      --policy-arn "$POLICY_ARN"
+
+    if [[ "$VERBOSE" == true ]]; then
+      msg SUCCESS "Attached policy '$POLICY_NAME' to role '$ROLE_NAME'"
+    fi
+  fi
+}
+
+create_user() {
+  local USERNAME=$1
+  local POLICY_NAME=$2
+  local POLICY_ARN="arn:aws:iam::${AWS_ACCOUNT_ID}:policy/${POLICY_NAME}"
+
+  if aws iam get-user --user-name "$USERNAME" >/dev/null 2>&1; then
+    msg INFO "User exists: https://console.aws.amazon.com/iam/home#/users/${USERNAME}"
+  else
+    aws iam create-user \
+      --user-name "$USERNAME" \
+      >/dev/null
+
+    if [[ "$VERBOSE" == true ]]; then
+      msg SUCCESS "Created User: https://console.aws.amazon.com/iam/home#/users/${USERNAME}"
+    fi
+  fi
+
+  if ! aws iam list-attached-user-policies \
+    --user-name "$USERNAME" \
+    --query "AttachedPolicies[?PolicyArn=='$POLICY_ARN']" \
+    --output text | grep -q "$POLICY_ARN"; then
+
+    aws iam attach-user-policy \
+      --user-name "$USERNAME" \
+      --policy-arn "$POLICY_ARN"
+
+    if [[ "$VERBOSE" == true ]]; then
+      msg SUCCESS "Attached policy '$POLICY_NAME' to user '$USERNAME'"
+    fi
+  fi
+
+  msg "----------------------------------"
+}
+
+# ======================
+# === !AWS-IAM Setup ===
+# ======================
+
+main() {
+  load_script "${LIB_DIR}/logger"
+  load_script "${LIB_DIR}/requirements"
+  msg ".\n.\n."
+
+  require_variable "AWS_ACCOUNT_ID"
+  msg INFO "Starting IAM Setup..."
+  msg "."
+
+  tail -n +2 "$USERS_CSV_FILE" | while IFS=', ' read -r USER ROLE POLICY; do
+    msg INFO "USER: $USER | ROLE: $ROLE | POLICY: $POLICY"
+    msg "."
+
+    create_policy "$POLICY"
+    create_role "$ROLE" "$POLICY"
+    create_user "$USER" "$POLICY"
+  done
+
+  msg SUCCESS "IAM Setup Complete!"
+  msg INFO "IAM Console: https://console.aws.amazon.com/iam/home"
+  msg INFO "Users      : https://console.aws.amazon.com/iam/home#/users"
+  msg INFO "Roles      : https://console.aws.amazon.com/iam/home#/roles"
+  msg INFO "Policies   : https://console.aws.amazon.com/iam/home#/policies"
+}
+
+# Run all
+main
