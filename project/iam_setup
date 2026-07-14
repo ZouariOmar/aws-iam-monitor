@@ -88,14 +88,15 @@ create_policy() {
   fi
 
   # Create policy if it doesn't exist
-  if ! aws iam get-policy \
-    --policy-arn "$POLICY_ARN" >/dev/null 2>&1; then
+  if ! aws iam get-policy --policy-arn "$POLICY_ARN" >/dev/null 2>&1; then
 
     aws iam create-policy \
       --policy-name "$POLICY_NAME" \
-      --policy-document "file://$POLICY_FILE"
+      --policy-document "file://$POLICY_FILE" >/dev/null
 
-    [[ "$VERBOSE" == true ]] && msg SUCCESS "Created Policy: $POLICY_NAME"
+    if [[ "$VERBOSE" == true ]]; then
+      msg SUCCESS "Created Policy: $POLICY_NAME"
+    fi
     return
   fi
 
@@ -107,18 +108,19 @@ create_policy() {
     --output text)
 
   # Normalize both JSON documents before comparison
-  local CURRENT_POLICY
-  CURRENT_POLICY=$(aws iam get-policy-version \
-    --policy-arn "$POLICY_ARN" \
-    --version-id "$DEFAULT_VERSION" \
-    --query 'PolicyVersion.Document' \
-    --output json | jq -c .)
+  # NOTE: I use `jq` for key ordering, `aws --output json` does not guarantee key ordering.
+  local CURRENT_POLICY_HASH
+  CURRENT_POLICY_HASH=$(
+    aws iam get-policy-version \
+      --policy-arn "$POLICY_ARN" \
+      --version-id "$DEFAULT_VERSION" |
+      jq -S '.PolicyVersion.Document' | sha256sum | cut -d' ' -f1
+  )
 
-  local NEW_POLICY
-  NEW_POLICY=$(jq -c . "$POLICY_FILE")
+  local NEW_POLICY_HASH
+  NEW_POLICY_HASH=$(jq -S . "$POLICY_FILE" | sha256sum | cut -d' ' -f1)
 
-  # Skip if unchanged
-  if [[ "$CURRENT_POLICY" == "$NEW_POLICY" ]]; then
+  if [[ "$CURRENT_POLICY_HASH" == "$NEW_POLICY_HASH" ]]; then
     msg INFO "Policy '$POLICY_NAME' is already up to date."
     return
   fi
@@ -151,50 +153,78 @@ create_policy() {
     --policy-document "file://$POLICY_FILE" \
     --set-as-default
 
-  [[ "$VERBOSE" == true ]] && msg SUCCESS "Updated Policy: $POLICY_NAME"
+  if [[ "$VERBOSE" == true ]]; then
+    msg SUCCESS "Updated Policy: $POLICY_NAME"
+  fi
 }
 
 create_role() {
-  ROLE_NAME=$1
-  POLICY_NAME=$2
+  local ROLE_NAME=$1
+  local POLICY_NAME=$2
+  local POLICY_ARN="arn:aws:iam::${AWS_ACCOUNT_ID}:policy/${POLICY_NAME}"
 
   if aws iam get-role \
     --role-name "$ROLE_NAME" >/dev/null 2>&1; then
 
     msg INFO "Role exists: https://console.aws.amazon.com/iam/home#/roles/${ROLE_NAME}"
-    return
+
+  else
+    aws iam create-role \
+      --role-name "$ROLE_NAME" \
+      --assume-role-policy-document file://trust-policy.json \
+      >/dev/null
+
+    if [[ "$VERBOSE" == true ]]; then
+      msg SUCCESS "Created Role: https://console.aws.amazon.com/iam/home#/roles/${ROLE_NAME}"
+    fi
   fi
 
-  aws iam create-role \
+  if ! aws iam list-attached-role-policies \
     --role-name "$ROLE_NAME" \
-    --assume-role-policy-document file://trust-policy.json
+    --query "AttachedPolicies[?PolicyArn=='$POLICY_ARN']" \
+    --output text | grep -q "$POLICY_ARN"; then
 
-  aws iam attach-role-policy \
-    --role-name "$ROLE_NAME" \
-    --policy-arn arn:aws:iam::"$AWS_ACCOUNT_ID":policy/"$POLICY_NAME"
+    aws iam attach-role-policy \
+      --role-name "$ROLE_NAME" \
+      --policy-arn "$POLICY_ARN"
 
-  [[ "$VERBOSE" == true ]] && msg SUCCESS "Created Role: https://console.aws.amazon.com/iam/home#/roles/${ROLE_NAME}"
+    if [[ "$VERBOSE" == true ]]; then
+      msg SUCCESS "Attached policy '$POLICY_NAME' to role '$ROLE_NAME'"
+    fi
+  fi
 }
 
 create_user() {
-  USERNAME=$1
-  POLICY_NAME=$2
+  local USERNAME=$1
+  local POLICY_NAME=$2
+  local POLICY_ARN="arn:aws:iam::${AWS_ACCOUNT_ID}:policy/${POLICY_NAME}"
 
-  if aws iam get-user \
-    --user-name "$USERNAME" >/dev/null 2>&1; then
-
+  if aws iam get-user --user-name "$USERNAME" >/dev/null 2>&1; then
     msg INFO "User exists: https://console.aws.amazon.com/iam/home#/users/${USERNAME}"
-    msg "----------------------------------"
-    return
+  else
+    aws iam create-user \
+      --user-name "$USERNAME" \
+      >/dev/null
+
+    if [[ "$VERBOSE" == true ]]; then
+      msg SUCCESS "Created User: https://console.aws.amazon.com/iam/home#/users/${USERNAME}"
+    fi
   fi
 
-  aws iam create-user --user-name "$USERNAME"
-
-  aws iam attach-user-policy \
+  if ! aws iam list-attached-user-policies \
     --user-name "$USERNAME" \
-    --policy-arn arn:aws:iam::"$AWS_ACCOUNT_ID":policy/"$POLICY_NAME"
+    --query "AttachedPolicies[?PolicyArn=='$POLICY_ARN']" \
+    --output text | grep -q "$POLICY_ARN"; then
 
-  [[ "$VERBOSE" == true ]] && msg SUCCESS "Created User: https://console.aws.amazon.com/iam/home#/users/${USERNAME}"
+    aws iam attach-user-policy \
+      --user-name "$USERNAME" \
+      --policy-arn "$POLICY_ARN"
+
+    if [[ "$VERBOSE" == true ]]; then
+      msg SUCCESS "Attached policy '$POLICY_NAME' to user '$USERNAME'"
+    fi
+  fi
+
   msg "----------------------------------"
 }
 
