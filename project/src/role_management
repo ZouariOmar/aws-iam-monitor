@@ -1,0 +1,413 @@
+#!/usr/bin/env bash
+# =========================================
+# .FILE
+#   role_management
+#
+# .SYNOPSIS
+#   AWS IAM role lifecycle management script
+#
+# .DESCRIPTION
+#   Creates and removes AWS IAM roles with
+#   managed policy attachments.
+#
+#   IAM roles provide temporary credentials that
+#   can be assumed by AWS services, applications,
+#   users, or external identity providers.
+#
+#   Supported lifecycle operations:
+#       - Create IAM roles
+#       - Configure trust policies
+#       - Attach managed policies
+#       - Detach managed policies
+#       - Remove inline policies
+#       - Remove instance profile associations
+#       - Delete IAM roles
+#
+#   Roles follow AWS IAM best practices by using
+#   temporary credentials instead of long-lived
+#   IAM user credentials.
+#
+#   This script is part of aws-iam-monitor,
+#   a real-time AWS IAM auditing and monitoring
+#   project.
+#
+# .INPUTS
+#   Command line arguments:
+#
+#   --up
+#       Create an IAM role and attach a managed
+#       policy.
+#
+#   --down
+#       Remove role dependencies and delete the
+#       IAM role.
+#
+#   --role <role>
+#       IAM role name.
+#
+#   --policy <policy>
+#       IAM managed policy name.
+#
+#   -v, --verbose
+#       Enable verbose execution logs.
+#
+# .OUTPUTS
+#   Creates or deletes IAM roles.
+#
+#   Manages IAM role policy attachments.
+#
+#   Outputs lifecycle logs to stdout.
+#
+# .NOTES
+#   Project       : aws-iam-monitor
+#   Version       : 1.0
+#   Author        : @ZouariOmar (zouariomar20@gmail.com)
+#   Created       : 20/07/2026
+#   Change Log    : 1.0 Initial release
+#
+# .EXAMPLE
+#
+#   Create a role:
+#
+#       ./role_management \
+#           --up \
+#           --role EC2-AppRole \
+#           --policy DeveloperPolicy
+#
+#   Delete a role:
+#
+#       ./role_management \
+#           --down \
+#           --role EC2-AppRole
+#
+#   Enable verbose mode:
+#
+#       ./role_management \
+#           --up \
+#           --role EC2-AppRole \
+#           --policy DeveloperPolicy \
+#           --verbose
+#
+# .REQUIREMENTS
+#   - AWS CLI v2
+#   - Configured AWS credentials
+#   - Trust policy JSON file
+#   - Shared project libraries:
+#       lib/common
+#       lib/logger
+#       lib/requirements
+#
+#   Required IAM permissions:
+#
+#       iam:CreateRole
+#       iam:GetRole
+#       iam:DeleteRole
+#       iam:AttachRolePolicy
+#       iam:DetachRolePolicy
+#       iam:ListAttachedRolePolicies
+#       iam:PutRolePolicy
+#       iam:DeleteRolePolicy
+#       iam:ListRolePolicies
+#       iam:ListInstanceProfilesForRole
+#       iam:RemoveRoleFromInstanceProfile
+#
+# .SECURITY
+#   - Uses temporary credentials through IAM roles.
+#   - Access is governed by trust policies.
+#   - No long-lived IAM user credentials.
+#   - Supports least privilege access management.
+#
+# shellcheck disable=SC1090
+# =========================================
+
+set -e
+
+LIB_DIR="lib"
+POLICIES_DIR="policies"
+
+TRUST_POLICY_FILE="${POLICIES_DIR}/trust-policy.json"
+
+# Load `common`
+if [[ -s "${LIB_DIR}/common" ]]; then
+  # shellcheck disable=SC1091
+  . "${LIB_DIR}/common"
+else
+  echo "[ERROR] Missing Script: '${LIB_DIR}/common'"
+  exit 1
+fi
+
+usage() {
+  cat <<EOF
+
+$(msg "USAGE:")
+
+  $(basename "$0") --up --role <role> --policy <policy>
+
+  $(basename "$0") --down --role <role>
+
+$(msg "COMMANDS:"):
+
+    --up
+      Create an IAM role and attach a managed policy.
+
+  --down
+      Remove role dependencies and delete the IAM role.
+
+
+$(msg "OPTIONS:")
+
+  --role <role>
+      IAM role name.
+
+  --policy <policy>
+      IAM managed policy name.
+
+  -v, --verbose
+      Enable verbose lifecycle logs.
+
+  -h, --help
+      Show this help message.
+
+
+$(msg "EXAMPLES:")
+
+  Create a role:
+
+      $(basename "$0") \
+          --up \
+          --role EC2-AppRole \
+          --policy DeveloperPolicy
+
+
+  Delete a role:
+
+      $(basename "$0") \
+          --down \
+          --role EC2-AppRole
+
+
+  Create with verbose output:
+
+      $(basename "$0") \
+          --up \
+          --role EC2-AppRole \
+          --policy DeveloperPolicy \
+          --verbose
+EOF
+  exit 1
+}
+
+create_role() {
+  local ROLE_NAME=$1
+  local POLICY_NAME=$2
+  local POLICY_ARN="arn:aws:iam::${AWS_ACCOUNT_ID}:policy/${POLICY_NAME}"
+
+  if aws iam get-role \
+    --role-name "$ROLE_NAME" >/dev/null 2>&1; then
+
+    msg INFO "Role exists: https://console.aws.amazon.com/iam/home#/roles/${ROLE_NAME}"
+
+  else
+    aws iam create-role \
+      --role-name "$ROLE_NAME" \
+      --assume-role-policy-document file://${TRUST_POLICY_FILE} \
+      >/dev/null
+
+    if [[ "$VERBOSE" == true ]]; then
+      msg SUCCESS "Created Role: https://console.aws.amazon.com/iam/home#/roles/${ROLE_NAME}"
+    fi
+  fi
+
+  if ! aws iam list-attached-role-policies \
+    --role-name "$ROLE_NAME" \
+    --query "AttachedPolicies[?PolicyArn=='$POLICY_ARN']" \
+    --output text | grep -q "$POLICY_ARN"; then
+
+    aws iam attach-role-policy \
+      --role-name "$ROLE_NAME" \
+      --policy-arn "$POLICY_ARN"
+
+    if [[ "$VERBOSE" == true ]]; then
+      msg SUCCESS "Attached policy '$POLICY_NAME' to role '$ROLE_NAME'"
+    fi
+  fi
+}
+
+delete_role() {
+  local ROLE_NAME=$1
+
+  if ! aws iam get-role \
+    --role-name "$ROLE_NAME" >/dev/null 2>&1; then
+    msg INFO "Role '$ROLE_NAME' does not exist."
+    return
+  fi
+
+  # Remove attached managed policies
+  while read -r POLICY_ARN; do
+    [[ -z "$POLICY_ARN" ]] && continue
+
+    aws iam detach-role-policy \
+      --role-name "$ROLE_NAME" \
+      --policy-arn "$POLICY_ARN"
+
+    if [[ "$VERBOSE" == true ]]; then
+      msg INFO "Detached role policy: $POLICY_ARN"
+    fi
+
+  done < <(
+    aws iam list-attached-role-policies \
+      --role-name "$ROLE_NAME" \
+      --query 'AttachedPolicies[].PolicyArn' \
+      --output text | tr '\t' '\n'
+  )
+
+  # Remove inline policies
+  while read -r POLICY_NAME; do
+    [[ -z "$POLICY_NAME" ]] && continue
+
+    aws iam delete-role-policy \
+      --role-name "$ROLE_NAME" \
+      --policy-name "$POLICY_NAME"
+
+    if [[ "$VERBOSE" == true ]]; then
+      msg INFO "Deleted inline policy: $POLICY_NAME"
+    fi
+
+  done < <(
+    aws iam list-role-policies \
+      --role-name "$ROLE_NAME" \
+      --query 'PolicyNames[]' \
+      --output text | tr '\t' '\n'
+  )
+
+  # Remove instance profiles
+  while read -r PROFILE; do
+    [[ -z "$PROFILE" ]] && continue
+
+    aws iam remove-role-from-instance-profile \
+      --instance-profile-name "$PROFILE" \
+      --role-name "$ROLE_NAME"
+
+    if [[ "$VERBOSE" == true ]]; then
+      msg INFO "Removed role from instance profile: $PROFILE"
+    fi
+
+  done < <(
+    aws iam list-instance-profiles-for-role \
+      --role-name "$ROLE_NAME" \
+      --query 'InstanceProfiles[].InstanceProfileName' \
+      --output text | tr '\t' '\n'
+  )
+
+  aws iam delete-role \
+    --role-name "$ROLE_NAME"
+
+  if [[ "$VERBOSE" == true ]]; then
+    msg SUCCESS "Deleted role: $ROLE_NAME"
+  fi
+}
+
+main() {
+  ACTION=""
+  ROLE=""
+  POLICY=""
+  VERBOSE=false
+  AWS_ACCOUNT_ID=""
+
+  load_script "${LIB_DIR}/logger"
+  load_script "${LIB_DIR}/requirements"
+
+  if [[ -s "${LIB_DIR}/common" ]]; then
+    # shellcheck disable=SC1091
+    . "${LIB_DIR}/common"
+  else
+    echo "[ERROR] Missing Script: '${LIB_DIR}/common'"
+    exit 1
+  fi
+
+  while [[ $# -gt 0 ]]; do
+    case "$1" in
+    --aws-account-id)
+      AWS_ACCOUNT_ID="$2"
+      shift 2
+      ;;
+
+    -v | --verbose)
+      VERBOSE=true
+      shift
+      ;;
+
+    --up | --down)
+      ACTION="$1"
+      shift
+      ;;
+
+    --role)
+      ROLE="$2"
+
+      if [[ -z "$ROLE" ]]; then
+        msg ERROR "Missing value for --role"
+        usage
+      fi
+
+      shift 2
+      ;;
+
+    --policy)
+      POLICY="$2"
+
+      if [[ -z "$POLICY" ]]; then
+        msg ERROR "Missing value for --policy"
+        usage
+      fi
+
+      shift 2
+      ;;
+
+    -h | --help)
+      usage
+      ;;
+
+    *)
+      msg ERROR "Unknown option: $1"
+      usage
+      ;;
+    esac
+  done
+
+  case "${ACTION:-}" in
+
+  --up)
+    if [[ -z "$ROLE" || -z "$POLICY" ]]; then
+      msg ERROR "Role and policy are required."
+      usage
+    fi
+
+    msg INFO "Creating role: $ROLE"
+    msg INFO "Attaching policy: $POLICY"
+
+    create_role \
+      "$ROLE" \
+      "$POLICY"
+    ;;
+
+  --down)
+    if [[ -z "$ROLE" ]]; then
+      msg ERROR "Role is required."
+      usage
+    fi
+
+    msg INFO "Deleting role: $ROLE"
+
+    delete_role \
+      "$ROLE"
+    ;;
+
+  *)
+    msg ERROR "Missing action (--up/--down)"
+    usage
+    ;;
+  esac
+}
+
+main "$@"

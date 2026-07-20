@@ -4,37 +4,70 @@
 #   iamctl
 #
 # .SYNOPSIS
-#   AWS IAM lifecycle management command
+#   AWS IAM lifecycle orchestration command
 #
 # .DESCRIPTION
-#   Provides a unified interface for managing
-#   IAM environment lifecycle operations.
+#   Provides a unified command-line interface for
+#   managing the AWS IAM environment lifecycle.
 #
-#   Supports creating, updating, and removing IAM
-#   resources through simple lifecycle commands.
+#   The script orchestrates IAM resource management
+#   operations by executing dedicated management
+#   modules:
 #
-#   Supports verbose execution mode for displaying
-#   detailed lifecycle and debugging information.
+#       - user_management
+#       - group_management
+#       - role_management
+#       - policy_management
 #
-#   This script is part of IAMSentinel, a real-time AWS IAM
-#   auditing and monitoring project.
+#   Supported lifecycle operations:
+#
+#       --up
+#           Creates and configures IAM users, groups,
+#           roles, and policies.
+#
+#       --down
+#           Removes IAM users, groups, roles,
+#           and policies created by the setup workflow.
+#
+#   Supports verbose execution mode for detailed
+#   lifecycle logs, AWS account information, and
+#   debugging output.
+#
+#   This script is part of aws-iam-monitor,
+#   a real-time AWS IAM auditing and monitoring project.
 #
 # .INPUTS
+#   Commands:
+#
 #   --up
-#       Creates and configures IAM users, roles,
-#       and policies.
+#       Executes IAM setup workflow.
+#
+#       Creates:
+#           - IAM policies
+#           - IAM groups
+#           - IAM roles (optional)
+#           - IAM users
 #
 #   --down
-#       Removes IAM users, roles, and policies
-#       created by the setup workflow.
+#       Executes IAM teardown workflow.
+#
+#       Removes:
+#           - IAM users
+#           - IAM roles
+#           - IAM groups
+#           - IAM policies
 #
 #   -v, --verbose
-#       Enables verbose output including loaded modules,
-#       AWS account details, and execution information.
+#       Enables verbose lifecycle execution logs.
+#
+#   -h, --help
+#       Displays usage information.
 #
 # .OUTPUTS
-#   Executes IAM lifecycle operations.
-#   Outputs execution logs to stdout.
+#   Executes IAM lifecycle operations through
+#   dedicated management scripts.
+#
+#   Outputs execution status and logs to stdout.
 #
 # .NOTES
 #   Project       : aws-iam-monitor
@@ -44,42 +77,87 @@
 #   Change Log    : 1.0 Initial release
 #
 # .EXAMPLE
-#   ./iamctl --up
 #
-#   ./iamctl --down
+#   Create IAM environment:
 #
-#   ./iamctl --up --verbose
+#       ./iamctl --up
 #
-#   ./iamctl --down -v
+#
+#   Remove IAM environment:
+#
+#       ./iamctl --down
+#
+#
+#   Create IAM environment with verbose logs:
+#
+#       ./iamctl --up --verbose
+#
+#
+#   Remove IAM environment with verbose logs:
+#
+#       ./iamctl --down -v
+#
 #
 # .REQUIREMENTS
 #   - AWS CLI v2
-#   - Python
 #   - Configured AWS credentials
-#   - IAM permissions:
-#       Required permissions depend on selected action:
-#       --up     iam:Create*, iam:Attach*, iam:Update*
-#       --down   iam:Delete*, iam:Detach*
+#
+#   Required IAM permissions depend on selected action:
+#
+#       --up:
+#           iam:CreateUser
+#           iam:CreateGroup
+#           iam:CreateRole
+#           iam:CreatePolicy
+#           iam:CreatePolicyVersion
+#           iam:Attach*
+#           iam:AddUserToGroup
+#
+#       --down:
+#           iam:DeleteUser
+#           iam:DeleteGroup
+#           iam:DeleteRole
+#           iam:DeletePolicy
+#           iam:DeletePolicyVersion
+#           iam:Detach*
+#           iam:RemoveUserFromGroup
 #
 # shellcheck disable=SC1090
+# shellcheck disable=SC1091
 # =========================================
 
 set -e
 
-# ========================
-# === Custom conf part ===
-# ========================
-
+# Directories
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-LIB_DIR="lib"
-IAM_SETUP="${SCRIPT_DIR}/iam_setup"
-IAM_TEARDOWN="${SCRIPT_DIR}/iam_teardown"
-VERBOSE=false
-AWS_ACCOUNT_ID=${AWS_ACCOUNT_ID:-}
+LIB_DIR="${SCRIPT_DIR}/lib"
+RES_DIR="${SCRIPT_DIR}/res"
+SRC_DIR="${SCRIPT_DIR}/src"
 
-# =========================
-# === !Custom conf part ===
-# =========================
+# Scripts
+POLICY_MANAGEMENT_SCRIPT="${SRC_DIR}/policy_management"
+GROUP_MANAGEMENT_SCRIPT="${SRC_DIR}/group_management"
+ROLE_MANAGEMENT_SCRIPT="${SRC_DIR}/role_management"
+USER_MANAGEMENT_SCRIPT="${SRC_DIR}/user_management"
+
+# Resources
+USERS_CSV_FILE="${RES_DIR}/users.csv"
+GROUPS_CSV_FILE="${RES_DIR}/groups.csv"
+ROLES_CSV_FILE="${RES_DIR}/roles.csv"
+
+# Global vars
+VERBOSE=${VERBOSE:-false}
+AWS_ACCOUNT_ID=${AWS_ACCOUNT_ID:-}
+ENABLE_ROLES=${ENABLE_ROLES:-false}
+
+# Load `common`
+if [[ -s "${LIB_DIR}/common" ]]; then
+  # shellcheck disable=SC1091
+  . "${LIB_DIR}/common"
+else
+  echo "[ERROR] Missing Script: '${LIB_DIR}/common'"
+  exit 1
+fi
 
 check_aws_auth() {
   msg INFO "Checking AWS credentials..."
@@ -94,8 +172,8 @@ check_aws_auth() {
       --query Arn \
       --output text)
 
-    msg SUCCESS "AWS authentication successful"
     if [[ "$VERBOSE" == true ]]; then
+      msg SUCCESS "AWS authentication successful"
       msg INFO "Account: $AWS_ACCOUNT_ID"
       msg INFO "Identity: $USER"
     fi
@@ -110,50 +188,199 @@ check_aws_auth() {
 usage() {
   cat <<EOF
 $(msg "USAGE:")
-  $(basename "$0") <command> [option]
+
+  $(basename "$0") <command> [options]
+
+
+$(msg "DESCRIPTION:")
+
+  $(basename "$0") orchestrates AWS IAM lifecycle operations
+  through dedicated management scripts.
+
+  Managed resources:
+
+      - IAM Users
+      - IAM Groups
+      - IAM Roles (optional)
+      - IAM Policies
+
 
 $(msg "COMMANDS:")
-  $(basename "$0") --up
-      Create or update IAM resources.
 
-  $(basename "$0") --down
-      Remove IAM resources.
+  --up
+      Create or update IAM environment.
+
+      Executes:
+        - policy_management
+        - group_management
+        - role_management (optional)
+        - user_management
+
+
+  --down
+      Remove IAM environment.
+
+      Executes:
+        - user_management
+        - role_management (optional)
+        - group_management
+        - policy_management
+
 
 $(msg "OPTIONS:")
 
-   -v, --verbose
-      Enable verbose output.
+  -r, --role
+      Enable IAM role management.
+
+      When enabled:
+        - Creates IAM roles during setup.
+        - Deletes IAM roles during teardown.
+
+
+  -v, --verbose
+      Enable verbose lifecycle logs.
+
 
   -h, --help
       Show this help message.
 
+
 $(msg "EXAMPLES:")
 
-  $(basename "$0") --up
+  Setup IAM environment:
 
-  $(basename "$0") --down
+      $(basename "$0") --up
 
-  $(basename "$0") --up --verbose
 
-  $(basename "$0") --down -v
+  Teardown IAM environment:
+
+      $(basename "$0") --down
+
+
+  Setup IAM environment with roles:
+
+      $(basename "$0") --up --role
+
+
+  Teardown IAM environment with roles:
+
+      $(basename "$0") --down --role
+
+
+  Enable verbose output:
+
+      $(basename "$0") --up --verbose
+
+      $(basename "$0") --down -v
+
+
+  Enable roles and verbose output:
+
+      $(basename "$0") --up --role --verbose
 EOF
   exit 1
 }
 
-main() {
-  # Load `common`
-  if [[ -s "${LIB_DIR}/common" ]]; then
-    # shellcheck disable=SC1091
-    . "${LIB_DIR}/common"
-  else
-    echo "[ERROR] Missing Script: '${LIB_DIR}/common'"
-    exit 1
+setup() {
+  local ACTION=$1
+
+  msg ".\n.\n."
+
+  ARGS=()
+
+  if [[ "$VERBOSE" == true ]]; then
+    ARGS+=(--verbose)
   fi
 
+  # Policies, roles and groups
+  while IFS=', ' read -r GROUP POLICY; do
+    if [[ "$VERBOSE" == true ]]; then
+      msg INFO "GROUP: $GROUP | POLICY: $POLICY"
+    fi
+
+    # Create/Delete Policy
+    run_script \
+      "$POLICY_MANAGEMENT_SCRIPT" \
+      "$ACTION" \
+      --aws-account-id "$AWS_ACCOUNT_ID" \
+      --policy "$POLICY" \
+      "${ARGS[@]}"
+
+    # Create/Delete Group
+    run_script \
+      "$GROUP_MANAGEMENT_SCRIPT" \
+      "$ACTION" \
+      --aws-account-id "$AWS_ACCOUNT_ID" \
+      --group "$GROUP" \
+      --policy "$POLICY" \
+      "${ARGS[@]}"
+
+    msg "."
+  done < <(tail -n +2 "$GROUPS_CSV_FILE")
+
+  # Users
+  while IFS=', ' read -r USER GROUP; do
+    if [[ "$VERBOSE" == true ]]; then
+      msg INFO "USER: $USER | GROUP: $GROUP"
+    fi
+
+    # Create/Delete User
+    run_script \
+      "$USER_MANAGEMENT_SCRIPT" \
+      "$ACTION" \
+      --user "$USER" \
+      --group "$GROUP" \
+      "${ARGS[@]}"
+
+    msg "."
+
+  done < <(tail -n +2 "$USERS_CSV_FILE")
+
+  # Roles
+  if [[ "$ENABLE_ROLES" == true ]]; then
+    while IFS=', ' read -r ROLE POLICY; do
+      if [[ "$VERBOSE" == true ]]; then
+        msg INFO "ROLE: $ROLE | POLICY: $POLICY"
+      fi
+
+      # Reset role policy argument foreach role
+      ARGS=()
+
+      if [[ "$VERBOSE" == true ]]; then
+        ARGS+=(--verbose)
+      fi
+
+      if [[ "$ACTION" == "--up" ]]; then
+        ARGS+=(--policy "$POLICY")
+      fi
+
+      run_script \
+        "$ROLE_MANAGEMENT_SCRIPT" \
+        "$ACTION" \
+        --aws-account-id "$AWS_ACCOUNT_ID" \
+        --role "$ROLE" \
+        "${ARGS[@]}"
+      msg "."
+    done < <(tail -n +2 "$ROLES_CSV_FILE")
+  fi
+
+  msg INFO "IAM Console...https://console.aws.amazon.com/iam/home"
+  msg INFO "Users.........https://console.aws.amazon.com/iam/home#/users"
+  msg INFO "Groups........https://console.aws.amazon.com/iam/home#/groups"
+  msg INFO "Roles.........https://console.aws.amazon.com/iam/home#/roles"
+  msg INFO "Policies......https://console.aws.amazon.com/iam/home#/policies"
+}
+
+main() {
   while [[ $# -gt 0 ]]; do
     case "$1" in
     -v | --verbose)
       VERBOSE=true
+      shift
+      ;;
+
+    -r | --role)
+      ENABLE_ROLES=true
       shift
       ;;
 
@@ -166,15 +393,31 @@ main() {
 
   load_script "${LIB_DIR}/logger" "$VERBOSE"
 
+  check_aws_auth
+
+  ARGS=(
+    --aws-account-id "$AWS_ACCOUNT_ID"
+  )
+
+  if [[ "$ENABLE_ROLES" == true ]]; then
+    ARGS+=(--role)
+  fi
+
+  if [[ "$VERBOSE" == true ]]; then
+    ARGS+=(--verbose)
+  fi
+
   case "${ACTION:-}" in
   --up)
-    check_aws_auth
-    run_script "$IAM_SETUP"
+    msg INFO "Starting IAM Setup..."
+    setup --up "${ARGS[@]}"
+    msg SUCCESS "IAM Setup Complete!"
     ;;
 
   --down)
-    check_aws_auth
-    run_script "$IAM_TEARDOWN"
+    msg INFO "Starting IAM cleanup..."
+    setup --down "${ARGS[@]}"
+    msg SUCCESS "IAM teardown complete!"
     ;;
 
   -h | --help)
