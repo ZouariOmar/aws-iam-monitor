@@ -1,6 +1,0 @@
-users, roles, policy
-prod-admin, prod-readonly-role, ProdPolicy
-prod-developer, prod-readonly-role, ProdPolicy
-dev-admin, dev-readonly-role, DevPolicy
-dev-developer, dev-readonly-role, DevPolicy
-test-admin, test-readonly-role, AuditPolicy
