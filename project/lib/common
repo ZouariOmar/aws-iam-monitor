@@ -59,17 +59,30 @@ load_script() {
 check_script() {
   local SCRIPT="$1"
 
+  if [[ -z "$SCRIPT" ]]; then
+    msg ERROR "Script path is empty."
+    exit 1
+  fi
+
+  if [[ ! -f "$SCRIPT" ]]; then
+    msg ERROR "Script not found: '$SCRIPT'"
+    exit 1
+  fi
+
   if [[ ! -x "$SCRIPT" ]]; then
-    msg ERROR "Missing or non-executable script: '$SCRIPT'"
+    msg ERROR "Script is not executable: '$SCRIPT'"
+    msg INFO "Run: chmod u+x '$SCRIPT'"
     exit 1
   fi
 }
 
 run_script() {
   local SCRIPT="$1"
+  shift
+
   check_script "$SCRIPT"
 
-  exec "$SCRIPT" "$AWS_ACCOUNT_ID" "$VERBOSE"
+  "$SCRIPT" "$@"
 }
 
 require_variable() {

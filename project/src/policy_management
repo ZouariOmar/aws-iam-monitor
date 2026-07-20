@@ -1,0 +1,428 @@
+#!/usr/bin/env bash
+# =========================================
+# .FILE
+#   policy_management
+#
+# .SYNOPSIS
+#   AWS IAM managed policy lifecycle management script
+#
+# .DESCRIPTION
+#   Creates, updates, and deletes AWS IAM managed
+#   policies from JSON policy documents.
+#
+#   Supports the complete lifecycle of customer-managed
+#   IAM policies, including:
+#
+#       - Creating IAM managed policies
+#       - Detecting policy document changes
+#       - Updating policies using policy versions
+#       - Removing old policy versions
+#       - Detaching policies from IAM entities
+#       - Deleting IAM managed policies
+#
+#   Policy documents are normalized and compared using
+#   SHA-256 hashes to avoid unnecessary policy updates.
+#
+#   This script is part of aws-iam-monitor, a real-time
+#   AWS IAM auditing and monitoring project.
+#
+# .INPUTS
+#   Command line arguments:
+#
+#   --up
+#       Creates a new policy or updates an existing policy.
+#
+#   --down
+#       Detaches and deletes an IAM managed policy.
+#
+#   --policy <policy>
+#       IAM policy name.
+#
+#   -v, --verbose
+#       Enables verbose execution logs.
+#
+# .OUTPUTS
+#   Creates, updates, or deletes IAM managed policies.
+#
+#   Manages policy versions and policy attachments.
+#
+#   Outputs lifecycle execution logs to stdout.
+#
+# .NOTES
+#   Project       : aws-iam-monitor
+#   Version       : 1.0
+#   Author        : @ZouariOmar (zouariomar20@gmail.com)
+#   Created       : 20/07/2026
+#   Change Log    : 1.0 Initial release
+#
+# .EXAMPLE
+#
+#   Create or update policy:
+#
+#       ./policy_management \
+#           --up \
+#           --policy DeveloperPolicy
+#
+#
+#   Delete policy:
+#
+#       ./policy_management \
+#           --down \
+#           --policy DeveloperPolicy
+#
+#
+#   Enable verbose mode:
+#
+#       ./policy_management \
+#           --up \
+#           --policy DeveloperPolicy \
+#           --verbose
+#
+#
+# .REQUIREMENTS
+#   - AWS CLI v2
+#   - jq
+#   - sha256sum
+#   - Configured AWS credentials
+#
+#   Required IAM permissions:
+#
+#       iam:CreatePolicy
+#       iam:GetPolicy
+#       iam:GetPolicyVersion
+#       iam:CreatePolicyVersion
+#       iam:DeletePolicyVersion
+#       iam:ListPolicyVersions
+#
+#       iam:DeletePolicy
+#
+#       iam:ListEntitiesForPolicy
+#       iam:DetachUserPolicy
+#       iam:DetachGroupPolicy
+#       iam:DetachRolePolicy
+#
+# .SECURITY
+#   - Uses customer managed IAM policies.
+#   - Avoids unnecessary policy version creation.
+#   - Maintains IAM policy version limits.
+#   - Supports least privilege permission management.
+#
+# shellcheck disable=SC1090
+# =========================================
+
+set -e
+
+LIB_DIR="lib"
+POLICIES_DIR="policies"
+
+# Load `common`
+if [[ -s "${LIB_DIR}/common" ]]; then
+  # shellcheck disable=SC1091
+  . "${LIB_DIR}/common"
+else
+  echo "[ERROR] Missing Script: '${LIB_DIR}/common'"
+  exit 1
+fi
+
+usage() {
+  cat <<EOF
+$(msg "USAGE:")
+
+  $(basename "$0") <--up|--down> --policy <policy> [options]
+
+
+$(msg "COMMANDS:"):
+
+  --up
+      Create a new IAM managed policy or update an
+      existing policy from:
+
+          policies/<policy>.json
+
+  --down
+      Detach the policy from IAM users, groups, and roles,
+      remove old policy versions, and delete the policy.
+
+
+$(msg "OPTIONS:")
+
+  --policy <policy>
+      IAM managed policy name.
+
+  -v, --verbose
+      Enable verbose execution logs.
+
+  -h, --help
+      Show this help message.
+
+
+$(msg "EXAMPLES:"):
+
+  Create or update a policy:
+
+      $(basename "$0") \
+          --up \
+          --policy DeveloperPolicy
+
+
+  Delete a policy:
+
+      $(basename "$0") \
+          --down \
+          --policy DeveloperPolicy
+
+
+  Create or update with verbose logging:
+
+      $(basename "$0") \
+          --up \
+          --policy DeveloperPolicy \
+          --verbose
+EOF
+  exit 1
+}
+
+# INFO: This function support policy create & update
+create_policy() {
+  local POLICY_NAME=$1
+  local POLICY_FILE="$POLICIES_DIR/${POLICY_NAME}.json"
+  local POLICY_ARN="arn:aws:iam::${AWS_ACCOUNT_ID}:policy/${POLICY_NAME}"
+
+  if [[ ! -s "$POLICY_FILE" ]]; then
+    msg ERROR "Policy file missing or empty: $POLICY_FILE"
+    exit 1
+  fi
+
+  # Create policy if it doesn't exist
+  if ! aws iam get-policy --policy-arn "$POLICY_ARN" >/dev/null 2>&1; then
+
+    aws iam create-policy \
+      --policy-name "$POLICY_NAME" \
+      --policy-document "file://$POLICY_FILE" >/dev/null
+
+    if [[ "$VERBOSE" == true ]]; then
+      msg SUCCESS "Created Policy: $POLICY_NAME"
+    fi
+    return
+  fi
+
+  # Get current default version
+  local DEFAULT_VERSION
+  DEFAULT_VERSION=$(aws iam get-policy \
+    --policy-arn "$POLICY_ARN" \
+    --query 'Policy.DefaultVersionId' \
+    --output text)
+
+  # Normalize both JSON documents before comparison
+  # NOTE: I use `jq` for key ordering, `aws --output json` does not guarantee key ordering.
+  local CURRENT_POLICY_HASH
+  CURRENT_POLICY_HASH=$(
+    aws iam get-policy-version \
+      --policy-arn "$POLICY_ARN" \
+      --version-id "$DEFAULT_VERSION" |
+      jq -S '.PolicyVersion.Document' | sha256sum | cut -d' ' -f1
+  )
+
+  local NEW_POLICY_HASH
+  NEW_POLICY_HASH=$(jq -S . "$POLICY_FILE" | sha256sum | cut -d' ' -f1)
+
+  if [[ "$CURRENT_POLICY_HASH" == "$NEW_POLICY_HASH" ]]; then
+    msg INFO "Policy '$POLICY_NAME' is already up to date."
+    return
+  fi
+
+  msg INFO "Updating policy '$POLICY_NAME'..."
+
+  # IAM allows only 5 policy versions
+  local VERSION_COUNT
+  VERSION_COUNT=$(aws iam list-policy-versions \
+    --policy-arn "$POLICY_ARN" \
+    --query 'length(Versions)' \
+    --output text)
+
+  if [[ "$VERSION_COUNT" -ge 5 ]]; then
+    local OLDEST_VERSION
+    OLDEST_VERSION=$(aws iam list-policy-versions \
+      --policy-arn "$POLICY_ARN" \
+      --query 'Versions[?!IsDefaultVersion] | sort_by(@,&CreateDate)[0].VersionId' \
+      --output text)
+
+    aws iam delete-policy-version \
+      --policy-arn "$POLICY_ARN" \
+      --version-id "$OLDEST_VERSION"
+
+    [[ "$VERBOSE" == true ]] && msg INFO "Deleted old policy version: $OLDEST_VERSION"
+  fi
+
+  aws iam create-policy-version \
+    --policy-arn "$POLICY_ARN" \
+    --policy-document "file://$POLICY_FILE" \
+    --set-as-default
+
+  if [[ "$VERBOSE" == true ]]; then
+    msg SUCCESS "Updated Policy: $POLICY_NAME"
+  fi
+}
+
+delete_policy() {
+  local POLICY_NAME=$1
+  local POLICY_ARN="arn:aws:iam::${AWS_ACCOUNT_ID}:policy/${POLICY_NAME}"
+
+  if ! aws iam get-policy \
+    --policy-arn "$POLICY_ARN" >/dev/null 2>&1; then
+    msg INFO "Policy '$POLICY_NAME' does not exist."
+    return
+  fi
+
+  if [[ "$VERBOSE" == true ]]; then
+    msg INFO "Removing attachments for policy: $POLICY_NAME"
+  fi
+
+  # Detach from roles
+  for ROLE in $(aws iam list-entities-for-policy \
+    --policy-arn "$POLICY_ARN" \
+    --query 'PolicyRoles[].RoleName' \
+    --output text 2>/dev/null || true); do
+
+    aws iam detach-role-policy \
+      --role-name "$ROLE" \
+      --policy-arn "$POLICY_ARN"
+
+    if [[ "$VERBOSE" == true ]]; then
+      msg INFO "Detached policy from role: $ROLE"
+    fi
+  done
+
+  # Detach from groups
+  for GROUP in $(aws iam list-entities-for-policy \
+    --policy-arn "$POLICY_ARN" \
+    --query 'PolicyGroups[].GroupName' \
+    --output text 2>/dev/null || true); do
+
+    aws iam detach-group-policy \
+      --group-name "$GROUP" \
+      --policy-arn "$POLICY_ARN"
+
+    if [[ "$VERBOSE" == true ]]; then
+      msg INFO "Detached policy from group: $GROUP"
+    fi
+  done
+
+  # Remove old policy versions
+  while read -r VERSION; do
+    [[ -z "$VERSION" ]] && continue
+
+    aws iam delete-policy-version \
+      --policy-arn "$POLICY_ARN" \
+      --version-id "$VERSION"
+
+    if [[ "$VERBOSE" == true ]]; then
+      msg INFO "Deleted policy version: $VERSION"
+    fi
+
+  done < <(
+    aws iam list-policy-versions \
+      --policy-arn "$POLICY_ARN" \
+      --query 'Versions[?!IsDefaultVersion].VersionId' \
+      --output text 2>/dev/null | tr '\t' '\n'
+  )
+
+  # Delete policy
+  aws iam delete-policy \
+    --policy-arn "$POLICY_ARN"
+
+  if [[ "$VERBOSE" == true ]]; then
+    msg SUCCESS "Deleted policy: $POLICY_NAME"
+  fi
+}
+
+main() {
+  ACTION=""
+  POLICY=""
+  VERBOSE=false
+  AWS_ACCOUNT_ID=""
+
+  load_script "${LIB_DIR}/logger"
+  load_script "${LIB_DIR}/requirements"
+
+  if [[ -s "${LIB_DIR}/common" ]]; then
+    # shellcheck disable=SC1091
+    . "${LIB_DIR}/common"
+  else
+    echo "[ERROR] Missing Script: '${LIB_DIR}/common'"
+    exit 1
+  fi
+
+  while [[ $# -gt 0 ]]; do
+    case "$1" in
+    --aws-account-id)
+      AWS_ACCOUNT_ID="$2"
+      shift 2
+      ;;
+
+    -v | --verbose)
+      VERBOSE=true
+      shift
+      ;;
+
+    --up | --down)
+      ACTION="$1"
+      shift
+      ;;
+
+    --policy)
+      POLICY="$2"
+
+      if [[ -z "$POLICY" ]]; then
+        msg ERROR "Missing value for --policy"
+        usage
+      fi
+
+      shift 2
+      ;;
+
+    -h | --help)
+      usage
+      ;;
+
+    *)
+      msg ERROR "Unknown option: $1"
+      usage
+      ;;
+    esac
+  done
+
+  case "${ACTION:-}" in
+
+  --up)
+    if [[ -z "$POLICY" ]]; then
+      msg ERROR "Policy is required."
+      usage
+    fi
+
+    msg INFO "Creating/updating policy: $POLICY"
+
+    create_policy \
+      "$POLICY"
+    ;;
+
+  --down)
+    if [[ -z "$POLICY" ]]; then
+      msg ERROR "Policy is required."
+      usage
+    fi
+
+    msg INFO "Deleting policy: $POLICY"
+
+    delete_policy \
+      "$POLICY"
+    ;;
+
+  *)
+    msg ERROR "Missing action (--up/--down)"
+    usage
+    ;;
+  esac
+}
+
+main "$@"

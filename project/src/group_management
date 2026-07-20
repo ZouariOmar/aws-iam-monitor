@@ -1,0 +1,367 @@
+#!/usr/bin/env bash
+# =========================================
+# .FILE
+#   group_management
+#
+# .SYNOPSIS
+#   AWS IAM group lifecycle management script
+#
+# .DESCRIPTION
+#   Creates, configures, and deletes AWS IAM groups
+#   with managed policy attachments.
+#
+#   Implements group-based access management following
+#   AWS IAM best practices and the Principle of Least
+#   Privilege (PoLP).
+#
+#   Users inherit permissions through IAM groups rather
+#   than direct policy attachments.
+#
+#   Supports:
+#
+#       - Creating IAM groups
+#       - Attaching managed policies to groups
+#       - Detaching managed policies
+#       - Removing users from groups
+#       - Deleting IAM groups
+#
+#   This script is part of aws-iam-monitor, a real-time
+#   AWS IAM auditing and monitoring project.
+#
+# .INPUTS
+#   Command line arguments:
+#
+#   --up
+#       Creates an IAM group and attaches a policy.
+#
+#   --down
+#       Removes group users, detaches policies,
+#       and deletes the IAM group.
+#
+#   --group <group>
+#       IAM group name.
+#
+#   --policy <policy>
+#       IAM managed policy name.
+#
+#   -v, --verbose
+#       Enables verbose execution logs.
+#
+# .OUTPUTS
+#   Creates or deletes IAM groups.
+#
+#   Manages IAM group policy attachments.
+#
+#   Manages IAM group membership.
+#
+#   Outputs lifecycle execution logs to stdout.
+#
+# .NOTES
+#   Project       : aws-iam-monitor
+#   Version       : 1.0
+#   Author        : @ZouariOmar (zouariomar20@gmail.com)
+#   Created       : 20/07/2026
+#   Change Log    : 1.0 Initial release
+#
+# .EXAMPLE
+#
+#   Create group with policy:
+#
+#       ./group_management \
+#           --up \
+#           --group DevGroup \
+#           --policy DeveloperPolicy
+#
+#
+#   Delete group:
+#
+#       ./group_management \
+#           --down \
+#           --group DevGroup
+#
+#
+#   Enable verbose mode:
+#
+#       ./group_management \
+#           --up \
+#           --group DevGroup \
+#           --policy DeveloperPolicy \
+#           --verbose
+#
+#
+# .REQUIREMENTS
+#   - AWS CLI v2
+#   - Configured AWS credentials
+#
+#   Required IAM permissions:
+#
+#       iam:CreateGroup
+#       iam:GetGroup
+#       iam:DeleteGroup
+#
+#       iam:AttachGroupPolicy
+#       iam:DetachGroupPolicy
+#       iam:ListAttachedGroupPolicies
+#
+#       iam:AddUserToGroup
+#       iam:RemoveUserFromGroup
+#
+# .SECURITY
+#   - No direct IAM user policy attachments.
+#   - Permissions are inherited through IAM groups.
+#   - Supports least-privilege access management.
+#   - Separates identity management from permission management.
+#
+# shellcheck disable=SC1090
+# =========================================
+
+LIB_DIR="lib"
+
+# Load `common`
+if [[ -s "${LIB_DIR}/common" ]]; then
+  # shellcheck disable=SC1091
+  . "${LIB_DIR}/common"
+else
+  echo "[ERROR] Missing Script: '${LIB_DIR}/common'"
+  exit 1
+fi
+
+usage() {
+  cat <<EOF
+$(msg "USAGE:")
+
+  $(basename "$0") <--up|--down> --group <group> [options]
+
+
+$(msg "COMMANDS:"):
+
+  --up
+      Create an IAM group and attach a managed policy.
+
+  --down
+      Detach managed policies, remove users from the
+      group, and delete the IAM group.
+
+
+$(msg "OPTIONS:")
+
+  --group <group>
+      IAM group name.
+
+  --policy <policy>
+      IAM managed policy name.
+
+  -v, --verbose
+      Enable verbose execution logs.
+
+  -h, --help
+      Show this help message.
+
+
+$(msg "EXAMPLES:"):
+
+  Create a group:
+
+      $(basename "$0") \
+          --up \
+          --group DevGroup \
+          --policy DeveloperPolicy
+
+
+  Delete a group:
+
+      $(basename "$0") \
+          --down \
+          --group DevGroup
+
+
+  Create a group with verbose logging:
+
+      $(basename "$0") \
+          --up \
+          --group DevGroup \
+          --policy DeveloperPolicy \
+          --verbose
+EOF
+  exit 1
+}
+
+create_group() {
+  local GROUP_NAME=$1
+  local POLICY_NAME=$2
+  local POLICY_ARN="arn:aws:iam::${AWS_ACCOUNT_ID}:policy/${POLICY_NAME}"
+
+  if ! aws iam get-group \
+    --group-name "$GROUP_NAME" >/dev/null 2>&1; then
+
+    aws iam create-group \
+      --group-name "$GROUP_NAME" >/dev/null 2>&1
+
+    [[ "$VERBOSE" == true ]] &&
+      msg SUCCESS "Created group: $GROUP_NAME"
+
+  fi
+
+  if ! aws iam list-attached-group-policies \
+    --group-name "$GROUP_NAME" \
+    --query "AttachedPolicies[?PolicyArn=='$POLICY_ARN']" \
+    --output text |
+    grep -q "$POLICY_ARN"; then
+
+    aws iam attach-group-policy \
+      --group-name "$GROUP_NAME" \
+      --policy-arn "$POLICY_ARN"
+
+    if [[ "$VERBOSE" == true ]]; then
+      msg SUCCESS "Attached policy '$POLICY_NAME' to group '$GROUP_NAME'"
+    fi
+  fi
+}
+
+delete_group() {
+  local GROUP_NAME=$1
+
+  if ! aws iam get-group \
+    --group-name "$GROUP_NAME" >/dev/null 2>&1; then
+
+    msg INFO "Group '$GROUP_NAME' does not exist."
+    return
+  fi
+
+  # Detach managed policies
+  while read -r POLICY_ARN; do
+    [[ -z "$POLICY_ARN" ]] && continue
+
+    aws iam detach-group-policy \
+      --group-name "$GROUP_NAME" \
+      --policy-arn "$POLICY_ARN"
+
+    if [[ "$VERBOSE" == true ]]; then
+      msg INFO "Detached group policy: $POLICY_ARN"
+    fi
+
+  done < <(
+    aws iam list-attached-group-policies \
+      --group-name "$GROUP_NAME" \
+      --query 'AttachedPolicies[].PolicyArn' \
+      --output text | tr '\t' '\n'
+  )
+
+  # Remove users from the group
+  while read -r USER; do
+    [[ -z "$USER" ]] && continue
+
+    aws iam remove-user-from-group \
+      --group-name "$GROUP_NAME" \
+      --user-name "$USER"
+
+    if [[ "$VERBOSE" == true ]]; then
+      msg INFO "Removed user '$USER' from group '$GROUP_NAME'"
+    fi
+
+  done < <(
+    aws iam get-group \
+      --group-name "$GROUP_NAME" \
+      --query 'Users[].UserName' \
+      --output text | tr '\t' '\n'
+  )
+
+  aws iam delete-group \
+    --group-name "$GROUP_NAME"
+
+  if [[ "$VERBOSE" == true ]]; then
+    msg SUCCESS "Deleted group: $GROUP_NAME"
+  fi
+}
+
+main() {
+  ACTION=""
+  VERBOSE=false
+  GROUP=""
+  POLICY=""
+  AWS_ACCOUNT_ID=""
+
+  load_script "${LIB_DIR}/logger"
+  load_script "${LIB_DIR}/requirements"
+
+  if [[ -s "${LIB_DIR}/common" ]]; then
+    # shellcheck disable=SC1091
+    . "${LIB_DIR}/common"
+  else
+    echo "[ERROR] Missing Script: '${LIB_DIR}/common'"
+    exit 1
+  fi
+
+  while [[ $# -gt 0 ]]; do
+    case "$1" in
+    --aws-account-id)
+      AWS_ACCOUNT_ID="$2"
+      shift 2
+      ;;
+
+    -v | --verbose)
+      VERBOSE=true
+      shift
+      ;;
+
+    --up | --down)
+      ACTION="$1"
+      shift
+      ;;
+
+    --group)
+      GROUP="$2"
+      shift 2
+      ;;
+
+    --policy)
+      POLICY="$2"
+      shift 2
+      ;;
+
+    -h | --help)
+      usage
+      ;;
+
+    *)
+      msg ERROR "Unknown option: $1"
+      usage
+      ;;
+    esac
+  done
+
+  case "${ACTION:-}" in
+  --up)
+    if [[ -z "$GROUP" || -z "$POLICY" ]]; then
+      msg ERROR "Group and policy are required."
+      usage
+    fi
+
+    msg INFO "Creating group: $GROUP"
+    msg INFO "Attaching policy: $POLICY"
+
+    create_group \
+      "$GROUP" \
+      "$POLICY"
+    ;;
+
+  --down)
+    if [[ -z "$GROUP" ]]; then
+      msg ERROR "Group is required."
+      usage
+    fi
+
+    msg INFO "Deleting group: $GROUP"
+
+    delete_group \
+      "$GROUP"
+    ;;
+
+  *)
+    msg ERROR "Missing action (--up/--down)"
+    usage
+    ;;
+  esac
+}
+
+main "$@"

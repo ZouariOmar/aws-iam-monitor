@@ -1,0 +1,7 @@
+user, group
+ProdAdmin, ProdGroup
+ProdDeveloper, ProdGroup
+DevAdmin, DevGroup
+DevDeveloper, DevGroup
+TestAdmin, TestGroup
+TestDeveloper, TestGroup
