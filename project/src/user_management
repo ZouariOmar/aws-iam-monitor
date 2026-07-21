@@ -106,12 +106,15 @@
 #
 # shellcheck disable=SC1090
 # =========================================
+set -Eeuo pipefail
 
-set -e
+# Directories
+LIB_DIR="${LIB_DIR:-lib}"
 
-LIB_DIR="lib"
+# Global vars
+VERBOSE=${VERBOSE:-false}
 
-# Load `common`
+# Load scripts
 if [[ -s "${LIB_DIR}/common" ]]; then
   # shellcheck disable=SC1091
   . "${LIB_DIR}/common"
@@ -119,10 +122,10 @@ else
   echo "[ERROR] Missing Script: '${LIB_DIR}/common'"
   exit 1
 fi
+load_script "${LIB_DIR}/logger"
 
 usage() {
   cat <<EOF
-
 $(msg "USAGE:")
 
   $(basename "$0") <--up|--down> --user <user> --group <group>
@@ -171,7 +174,6 @@ $(msg "EXAMPLES:")
           --user DevAdmin \
           --group DevGroup \
           --verbose
-
 EOF
   exit 1
 }
@@ -232,22 +234,6 @@ delete_user() {
 }
 
 main() {
-  ACTION=""
-  VERBOSE=false
-  USER=""
-  GROUP=""
-
-  load_script "${LIB_DIR}/logger"
-  load_script "${LIB_DIR}/requirements"
-
-  if [[ -s "${LIB_DIR}/common" ]]; then
-    # shellcheck disable=SC1091
-    . "${LIB_DIR}/common"
-  else
-    echo "[ERROR] Missing Script: '${LIB_DIR}/common'"
-    exit 1
-  fi
-
   while [[ $# -gt 0 ]]; do
     case "$1" in
     -v | --verbose)
@@ -294,32 +280,15 @@ main() {
   done
 
   case "${ACTION:-}" in
-
   --up)
-    if [[ -z "$USER" || -z "$GROUP" ]]; then
-      msg ERROR "--user and --group are required"
-      usage
-    fi
-
     msg INFO "Creating IAM user: $USER"
     msg INFO "Adding user to group: $GROUP"
-
-    create_user \
-      "$USER" \
-      "$GROUP"
+    create_user "$USER" "$GROUP"
     ;;
 
   --down)
-    if [[ -z "$USER" || -z "$GROUP" ]]; then
-      msg ERROR "--user and --group are required"
-      usage
-    fi
-
     msg INFO "Deleting IAM user: $USER"
-
-    delete_user \
-      "$USER" \
-      "$GROUP"
+    delete_user "$USER" "$GROUP"
     ;;
 
   *)

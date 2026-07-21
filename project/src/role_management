@@ -119,15 +119,20 @@
 #
 # shellcheck disable=SC1090
 # =========================================
+set -Eeuo pipefail
 
-set -e
+# Directories
+LIB_DIR="${LIB_DIR:-lib}"
+POLICIES_DIR="${POLICIES_DIR:-policies}"
 
-LIB_DIR="lib"
-POLICIES_DIR="policies"
-
+# Files
 TRUST_POLICY_FILE="${POLICIES_DIR}/trust-policy.json"
 
-# Load `common`
+# Global vars
+VERBOSE=${VERBOSE:-false}
+AWS_ACCOUNT_ID=${AWS_ACCOUNT_ID:-}
+
+# Load scripts
 if [[ -s "${LIB_DIR}/common" ]]; then
   # shellcheck disable=SC1091
   . "${LIB_DIR}/common"
@@ -135,10 +140,10 @@ else
   echo "[ERROR] Missing Script: '${LIB_DIR}/common'"
   exit 1
 fi
+load_script "${LIB_DIR}/logger"
 
 usage() {
   cat <<EOF
-
 $(msg "USAGE:")
 
   $(basename "$0") --up --role <role> --policy <policy>
@@ -210,8 +215,9 @@ create_role() {
   else
     aws iam create-role \
       --role-name "$ROLE_NAME" \
-      --assume-role-policy-document file://${TRUST_POLICY_FILE} \
-      >/dev/null
+      --assume-role-policy-document "$(
+        sed "s/{{AWS_ACCOUNT_ID}}/${AWS_ACCOUNT_ID}/g" "$TRUST_POLICY_FILE"
+      )" >/dev/null
 
     if [[ "$VERBOSE" == true ]]; then
       msg SUCCESS "Created Role: https://console.aws.amazon.com/iam/home#/roles/${ROLE_NAME}"
@@ -308,23 +314,6 @@ delete_role() {
 }
 
 main() {
-  ACTION=""
-  ROLE=""
-  POLICY=""
-  VERBOSE=false
-  AWS_ACCOUNT_ID=""
-
-  load_script "${LIB_DIR}/logger"
-  load_script "${LIB_DIR}/requirements"
-
-  if [[ -s "${LIB_DIR}/common" ]]; then
-    # shellcheck disable=SC1091
-    . "${LIB_DIR}/common"
-  else
-    echo "[ERROR] Missing Script: '${LIB_DIR}/common'"
-    exit 1
-  fi
-
   while [[ $# -gt 0 ]]; do
     case "$1" in
     --aws-account-id)
@@ -346,7 +335,7 @@ main() {
       ROLE="$2"
 
       if [[ -z "$ROLE" ]]; then
-        msg ERROR "Missing value for --role"
+        msg ERROR "Role is required."
         usage
       fi
 
@@ -357,7 +346,7 @@ main() {
       POLICY="$2"
 
       if [[ -z "$POLICY" ]]; then
-        msg ERROR "Missing value for --policy"
+        msg ERROR "Policy are required."
         usage
       fi
 
@@ -376,31 +365,15 @@ main() {
   done
 
   case "${ACTION:-}" in
-
   --up)
-    if [[ -z "$ROLE" || -z "$POLICY" ]]; then
-      msg ERROR "Role and policy are required."
-      usage
-    fi
-
     msg INFO "Creating role: $ROLE"
     msg INFO "Attaching policy: $POLICY"
-
-    create_role \
-      "$ROLE" \
-      "$POLICY"
+    create_role "$ROLE" "$POLICY"
     ;;
 
   --down)
-    if [[ -z "$ROLE" ]]; then
-      msg ERROR "Role is required."
-      usage
-    fi
-
     msg INFO "Deleting role: $ROLE"
-
-    delete_role \
-      "$ROLE"
+    delete_role "$ROLE"
     ;;
 
   *)

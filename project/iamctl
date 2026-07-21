@@ -123,34 +123,32 @@
 #           iam:RemoveUserFromGroup
 #
 # shellcheck disable=SC1090
-# shellcheck disable=SC1091
 # =========================================
-
-set -e
+set -Eeuo pipefail
 
 # Directories
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-LIB_DIR="${SCRIPT_DIR}/lib"
-RES_DIR="${SCRIPT_DIR}/res"
-SRC_DIR="${SCRIPT_DIR}/src"
+LIB_DIR="${LIB_DIR:-${SCRIPT_DIR}/lib}"
+RES_DIR="${RES_DIR:-${SCRIPT_DIR}/res}"
+SRC_DIR="${SRC_DIR:-${SCRIPT_DIR}/src}"
 
 # Scripts
-POLICY_MANAGEMENT_SCRIPT="${SRC_DIR}/policy_management"
-GROUP_MANAGEMENT_SCRIPT="${SRC_DIR}/group_management"
-ROLE_MANAGEMENT_SCRIPT="${SRC_DIR}/role_management"
-USER_MANAGEMENT_SCRIPT="${SRC_DIR}/user_management"
+POLICY_MANAGEMENT_SCRIPT="${POLICY_MANAGEMENT_SCRIPT:-${SRC_DIR}/policy_management}"
+GROUP_MANAGEMENT_SCRIPT="${GROUP_MANAGEMENT_SCRIPT:-${SRC_DIR}/group_management}"
+ROLE_MANAGEMENT_SCRIPT="${ROLE_MANAGEMENT_SCRIPT:-${SRC_DIR}/role_management}"
+USER_MANAGEMENT_SCRIPT="${USER_MANAGEMENT_SCRIPT:-${SRC_DIR}/user_management}"
 
 # Resources
-USERS_CSV_FILE="${RES_DIR}/users.csv"
-GROUPS_CSV_FILE="${RES_DIR}/groups.csv"
-ROLES_CSV_FILE="${RES_DIR}/roles.csv"
+USERS_CSV_FILE="${USERS_CSV_FILE:-${RES_DIR}/users.csv}"
+GROUPS_CSV_FILE="${GROUPS_CSV_FILE:-${RES_DIR}/groups.csv}"
+ROLES_CSV_FILE="${ROLES_CSV_FILE:-${RES_DIR}/roles.csv}"
 
 # Global vars
 VERBOSE=${VERBOSE:-false}
 AWS_ACCOUNT_ID=${AWS_ACCOUNT_ID:-}
 ENABLE_ROLES=${ENABLE_ROLES:-false}
 
-# Load `common`
+# Load scripts
 if [[ -s "${LIB_DIR}/common" ]]; then
   # shellcheck disable=SC1091
   . "${LIB_DIR}/common"
@@ -158,6 +156,11 @@ else
   echo "[ERROR] Missing Script: '${LIB_DIR}/common'"
   exit 1
 fi
+load_script "${LIB_DIR}/logger"
+load_script "${LIB_DIR}/requirements"
+
+# Check requirements
+check_requirements aws jq sed
 
 check_aws_auth() {
   msg INFO "Checking AWS credentials..."
@@ -216,7 +219,6 @@ $(msg "COMMANDS:")
         - role_management (optional)
         - user_management
 
-
   --down
       Remove IAM environment.
 
@@ -236,10 +238,8 @@ $(msg "OPTIONS:")
         - Creates IAM roles during setup.
         - Deletes IAM roles during teardown.
 
-
   -v, --verbose
       Enable verbose lifecycle logs.
-
 
   -h, --help
       Show this help message.
@@ -251,28 +251,23 @@ $(msg "EXAMPLES:")
 
       $(basename "$0") --up
 
-
   Teardown IAM environment:
 
       $(basename "$0") --down
-
 
   Setup IAM environment with roles:
 
       $(basename "$0") --up --role
 
-
   Teardown IAM environment with roles:
 
       $(basename "$0") --down --role
-
 
   Enable verbose output:
 
       $(basename "$0") --up --verbose
 
       $(basename "$0") --down -v
-
 
   Enable roles and verbose output:
 
@@ -284,6 +279,10 @@ EOF
 setup() {
   local ACTION=$1
 
+  msg INFO "$([ "$ACTION" == "--up" ] &&
+    echo "Starting IAM Setup..." ||
+    echo "Starting IAM cleanup...")"
+
   msg ".\n.\n."
 
   ARGS=()
@@ -292,7 +291,7 @@ setup() {
     ARGS+=(--verbose)
   fi
 
-  # Policies, roles and groups
+  # Policies and groups
   while IFS=', ' read -r GROUP POLICY; do
     if [[ "$VERBOSE" == true ]]; then
       msg INFO "GROUP: $GROUP | POLICY: $POLICY"
@@ -354,6 +353,7 @@ setup() {
         ARGS+=(--policy "$POLICY")
       fi
 
+      # Create/Delete Role
       run_script \
         "$ROLE_MANAGEMENT_SCRIPT" \
         "$ACTION" \
@@ -364,6 +364,10 @@ setup() {
     done < <(tail -n +2 "$ROLES_CSV_FILE")
   fi
 
+  msg SUCCESS "$([ "$ACTION" == "--up" ] &&
+    echo "IAM Setup Complete!" ||
+    echo "IAM teardown complete!")"
+
   msg INFO "IAM Console...https://console.aws.amazon.com/iam/home"
   msg INFO "Users.........https://console.aws.amazon.com/iam/home#/users"
   msg INFO "Groups........https://console.aws.amazon.com/iam/home#/groups"
@@ -372,63 +376,36 @@ setup() {
 }
 
 main() {
+  local ACTION="--up"
+
   while [[ $# -gt 0 ]]; do
     case "$1" in
+    --up | --down)
+      ACTION="$1"
+      ;;
+
     -v | --verbose)
       VERBOSE=true
-      shift
       ;;
 
     -r | --role)
       ENABLE_ROLES=true
-      shift
+      ;;
+
+    -h | --help)
+      usage
       ;;
 
     *)
-      ACTION="$1"
-      shift
+      msg ERROR "Unknown option: $1"
+      usage
       ;;
     esac
+    shift
   done
 
-  load_script "${LIB_DIR}/logger" "$VERBOSE"
-
   check_aws_auth
-
-  ARGS=(
-    --aws-account-id "$AWS_ACCOUNT_ID"
-  )
-
-  if [[ "$ENABLE_ROLES" == true ]]; then
-    ARGS+=(--role)
-  fi
-
-  if [[ "$VERBOSE" == true ]]; then
-    ARGS+=(--verbose)
-  fi
-
-  case "${ACTION:-}" in
-  --up)
-    msg INFO "Starting IAM Setup..."
-    setup --up "${ARGS[@]}"
-    msg SUCCESS "IAM Setup Complete!"
-    ;;
-
-  --down)
-    msg INFO "Starting IAM cleanup..."
-    setup --down "${ARGS[@]}"
-    msg SUCCESS "IAM teardown complete!"
-    ;;
-
-  -h | --help)
-    usage
-    ;;
-
-  *)
-    msg ERROR "Unknown option: $ACTION"
-    usage
-    ;;
-  esac
+  setup "$ACTION"
 }
 
 main "$@"

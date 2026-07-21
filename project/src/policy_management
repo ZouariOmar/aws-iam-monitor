@@ -109,13 +109,17 @@
 #
 # shellcheck disable=SC1090
 # =========================================
+set -Eeuo pipefail
 
-set -e
+# Directories
+LIB_DIR="${LIB_DIR:-lib}"
+POLICIES_DIR="${POLICIES_DIR:-policies}"
 
-LIB_DIR="lib"
-POLICIES_DIR="policies"
+# Global vars
+VERBOSE=${VERBOSE:-false}
+AWS_ACCOUNT_ID=${AWS_ACCOUNT_ID:-}
 
-# Load `common`
+# Load scripts
 if [[ -s "${LIB_DIR}/common" ]]; then
   # shellcheck disable=SC1091
   . "${LIB_DIR}/common"
@@ -123,6 +127,7 @@ else
   echo "[ERROR] Missing Script: '${LIB_DIR}/common'"
   exit 1
 fi
+load_script "${LIB_DIR}/logger"
 
 usage() {
   cat <<EOF
@@ -164,13 +169,11 @@ $(msg "EXAMPLES:"):
           --up \
           --policy DeveloperPolicy
 
-
   Delete a policy:
 
       $(basename "$0") \
           --down \
           --policy DeveloperPolicy
-
 
   Create or update with verbose logging:
 
@@ -337,22 +340,6 @@ delete_policy() {
 }
 
 main() {
-  ACTION=""
-  POLICY=""
-  VERBOSE=false
-  AWS_ACCOUNT_ID=""
-
-  load_script "${LIB_DIR}/logger"
-  load_script "${LIB_DIR}/requirements"
-
-  if [[ -s "${LIB_DIR}/common" ]]; then
-    # shellcheck disable=SC1091
-    . "${LIB_DIR}/common"
-  else
-    echo "[ERROR] Missing Script: '${LIB_DIR}/common'"
-    exit 1
-  fi
-
   while [[ $# -gt 0 ]]; do
     case "$1" in
     --aws-account-id)
@@ -374,7 +361,7 @@ main() {
       POLICY="$2"
 
       if [[ -z "$POLICY" ]]; then
-        msg ERROR "Missing value for --policy"
+        msg ERROR "Policy is required."
         usage
       fi
 
@@ -393,29 +380,14 @@ main() {
   done
 
   case "${ACTION:-}" in
-
   --up)
-    if [[ -z "$POLICY" ]]; then
-      msg ERROR "Policy is required."
-      usage
-    fi
-
     msg INFO "Creating/updating policy: $POLICY"
-
-    create_policy \
-      "$POLICY"
+    create_policy "$POLICY"
     ;;
 
   --down)
-    if [[ -z "$POLICY" ]]; then
-      msg ERROR "Policy is required."
-      usage
-    fi
-
     msg INFO "Deleting policy: $POLICY"
-
-    delete_policy \
-      "$POLICY"
+    delete_policy "$POLICY"
     ;;
 
   *)

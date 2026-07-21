@@ -114,10 +114,16 @@
 #
 # shellcheck disable=SC1090
 # =========================================
+set -Eeuo pipefail
 
-LIB_DIR="lib"
+# Directories
+LIB_DIR="${LIB_DIR:-lib}"
 
-# Load `common`
+# Global vars
+VERBOSE=${VERBOSE:-false}
+AWS_ACCOUNT_ID=${AWS_ACCOUNT_ID:-}
+
+# Load scripts
 if [[ -s "${LIB_DIR}/common" ]]; then
   # shellcheck disable=SC1091
   . "${LIB_DIR}/common"
@@ -125,6 +131,7 @@ else
   echo "[ERROR] Missing Script: '${LIB_DIR}/common'"
   exit 1
 fi
+load_script "${LIB_DIR}/logger"
 
 usage() {
   cat <<EOF
@@ -275,23 +282,6 @@ delete_group() {
 }
 
 main() {
-  ACTION=""
-  VERBOSE=false
-  GROUP=""
-  POLICY=""
-  AWS_ACCOUNT_ID=""
-
-  load_script "${LIB_DIR}/logger"
-  load_script "${LIB_DIR}/requirements"
-
-  if [[ -s "${LIB_DIR}/common" ]]; then
-    # shellcheck disable=SC1091
-    . "${LIB_DIR}/common"
-  else
-    echo "[ERROR] Missing Script: '${LIB_DIR}/common'"
-    exit 1
-  fi
-
   while [[ $# -gt 0 ]]; do
     case "$1" in
     --aws-account-id)
@@ -311,11 +301,23 @@ main() {
 
     --group)
       GROUP="$2"
+
+      if [[ -z "$GROUP" ]]; then
+        msg ERROR "Group is required."
+        usage
+      fi
+
       shift 2
       ;;
 
     --policy)
       POLICY="$2"
+
+      if [[ -z "$POLICY" ]]; then
+        msg ERROR "Policy are required."
+        usage
+      fi
+
       shift 2
       ;;
 
@@ -332,29 +334,14 @@ main() {
 
   case "${ACTION:-}" in
   --up)
-    if [[ -z "$GROUP" || -z "$POLICY" ]]; then
-      msg ERROR "Group and policy are required."
-      usage
-    fi
-
     msg INFO "Creating group: $GROUP"
     msg INFO "Attaching policy: $POLICY"
-
-    create_group \
-      "$GROUP" \
-      "$POLICY"
+    create_group "$GROUP" "$POLICY"
     ;;
 
   --down)
-    if [[ -z "$GROUP" ]]; then
-      msg ERROR "Group is required."
-      usage
-    fi
-
     msg INFO "Deleting group: $GROUP"
-
-    delete_group \
-      "$GROUP"
+    delete_group "$GROUP"
     ;;
 
   *)
