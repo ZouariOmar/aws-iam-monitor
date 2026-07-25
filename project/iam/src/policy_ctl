@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # =========================================
 # .FILE
-#   policy_management
+#   policy_ctl
 #
 # .SYNOPSIS
 #   AWS IAM managed policy lifecycle management script
@@ -59,21 +59,21 @@
 #
 #   Create or update policy:
 #
-#       ./policy_management \
+#       ./policy_ctl \
 #           --up \
 #           --policy DeveloperPolicy
 #
 #
 #   Delete policy:
 #
-#       ./policy_management \
+#       ./policy_ctl \
 #           --down \
 #           --policy DeveloperPolicy
 #
 #
 #   Enable verbose mode:
 #
-#       ./policy_management \
+#       ./policy_ctl \
 #           --up \
 #           --policy DeveloperPolicy \
 #           --verbose
@@ -109,13 +109,26 @@
 #
 # shellcheck disable=SC1090
 # =========================================
+set -Eeuo pipefail
 
-set -e
+#####################
+### CONFIGURATION ###
+#####################
 
-LIB_DIR="lib"
-POLICIES_DIR="policies"
+# Directories
+LIB_DIR="${LIB_DIR:-lib}"
+IAM_DIR="${IAM_DIR:-iam}"
+POLICIES_DIR="${POLICIES_DIR:-${IAM_DIR}/policies}"
 
-# Load `common`
+# Global vars
+VERBOSE=${VERBOSE:-false}
+AWS_ACCOUNT_ID=${AWS_ACCOUNT_ID:-}
+
+######################
+### !CONFIGURATION ###
+######################
+
+# Load scripts
 if [[ -s "${LIB_DIR}/common" ]]; then
   # shellcheck disable=SC1091
   . "${LIB_DIR}/common"
@@ -123,6 +136,7 @@ else
   echo "[ERROR] Missing Script: '${LIB_DIR}/common'"
   exit 1
 fi
+load_script "${LIB_DIR}/logger"
 
 usage() {
   cat <<EOF
@@ -164,13 +178,11 @@ $(msg "EXAMPLES:"):
           --up \
           --policy DeveloperPolicy
 
-
   Delete a policy:
 
       $(basename "$0") \
           --down \
           --policy DeveloperPolicy
-
 
   Create or update with verbose logging:
 
@@ -337,22 +349,6 @@ delete_policy() {
 }
 
 main() {
-  ACTION=""
-  POLICY=""
-  VERBOSE=false
-  AWS_ACCOUNT_ID=""
-
-  load_script "${LIB_DIR}/logger"
-  load_script "${LIB_DIR}/requirements"
-
-  if [[ -s "${LIB_DIR}/common" ]]; then
-    # shellcheck disable=SC1091
-    . "${LIB_DIR}/common"
-  else
-    echo "[ERROR] Missing Script: '${LIB_DIR}/common'"
-    exit 1
-  fi
-
   while [[ $# -gt 0 ]]; do
     case "$1" in
     --aws-account-id)
@@ -372,12 +368,7 @@ main() {
 
     --policy)
       POLICY="$2"
-
-      if [[ -z "$POLICY" ]]; then
-        msg ERROR "Missing value for --policy"
-        usage
-      fi
-
+      require_variable POLICY
       shift 2
       ;;
 
@@ -393,29 +384,14 @@ main() {
   done
 
   case "${ACTION:-}" in
-
   --up)
-    if [[ -z "$POLICY" ]]; then
-      msg ERROR "Policy is required."
-      usage
-    fi
-
     msg INFO "Creating/updating policy: $POLICY"
-
-    create_policy \
-      "$POLICY"
+    create_policy "$POLICY"
     ;;
 
   --down)
-    if [[ -z "$POLICY" ]]; then
-      msg ERROR "Policy is required."
-      usage
-    fi
-
     msg INFO "Deleting policy: $POLICY"
-
-    delete_policy \
-      "$POLICY"
+    delete_policy "$POLICY"
     ;;
 
   *)
