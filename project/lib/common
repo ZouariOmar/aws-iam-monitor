@@ -38,10 +38,21 @@
 #
 # shellcheck disable=SC1090
 # =========================================
+set -Eeuo pipefail
+
+#####################
+### CONFIGURATION ###
+#####################
+
+# Global vars
+VERBOSE=${VERBOSE:-false}
+
+######################
+### !CONFIGURATION ###
+######################
 
 load_script() {
   local SCRIPT="$1"
-  local VERBOSE="${2:-false}"
 
   if [[ -s "$SCRIPT" ]]; then
     . "$SCRIPT"
@@ -82,7 +93,18 @@ run_script() {
 
   check_script "$SCRIPT"
 
+  if [[ "$VERBOSE" == true ]]; then
+    msg INFO "Running: ${SCRIPT}"
+  fi
+
   "$SCRIPT" "$@"
+
+  local STATUS=$?
+
+  if [[ $STATUS -ne 0 ]]; then
+    msg ERROR "Script failed: '${SCRIPT}' (exit code: ${STATUS})"
+    exit "$STATUS"
+  fi
 }
 
 require_variable() {

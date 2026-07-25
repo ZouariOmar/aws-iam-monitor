@@ -33,8 +33,7 @@
 #
 #   check_requirements aws python
 # =========================================
-
-set -e
+set -Eeuo pipefail
 
 check_command() {
   local CMD="$1"

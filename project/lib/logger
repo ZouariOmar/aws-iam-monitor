@@ -43,8 +43,7 @@
 #
 # shellcheck disable=SC1091
 # =========================================
-
-set -e
+set -Eeuo pipefail
 
 # Load colors
 [[ -s "$HOME/.bash/.bash_colors" ]] || {
