@@ -1,0 +1,442 @@
+#!/usr/bin/env bash
+# =========================================
+# .FILE
+#   awsctl
+#
+# .SYNOPSIS
+#   AWS lifecycle orchestration command.
+#
+# .DESCRIPTION
+#   Provides a unified command-line interface
+#   for managing AWS security infrastructure
+#   components used by the aws-iam-monitor
+#   project.
+#
+#   The script orchestrates dedicated management
+#   modules:
+#
+#       - iamctl
+#           IAM users, groups, roles, policies
+#
+#       - cloud_trail_ctl
+#           CloudTrail trail, S3 log bucket,
+#           encryption, and audit configuration
+#
+#   Supported lifecycle operations:
+#
+#       --up
+#           Creates and configures resources.
+#
+#       --down
+#           Removes configured resources.
+#
+#       --status
+#           Displays resource status.
+#
+#   Supports:
+#
+#       - Target-specific execution:
+#           iam
+#           cloud-trail
+#
+#       - Optional IAM role management.
+#
+#       - Verbose execution logs.
+#
+#   This script is part of aws-iam-monitor,
+#   a real-time AWS IAM auditing and monitoring
+#   project.
+#
+# .INPUTS
+#   Commands:
+#
+#   --up
+#       Creates or updates the selected environment.
+#
+#   --down
+#       Removes the selected environment.
+#
+#   --status
+#       Displays the selected environment status.
+#
+#   Targets:
+#
+#   iam
+#       Executes IAM lifecycle management:
+#
+#           - IAM policies
+#           - IAM groups
+#           - IAM users
+#           - IAM roles (optional)
+#
+#   cloud-trail
+#       Executes CloudTrail lifecycle management:
+#
+#           - CloudTrail trail
+#           - S3 audit bucket
+#           - Bucket encryption
+#           - Bucket policy
+#           - Event selectors
+#
+#   Options:
+#
+#   -r, --role
+#       Enables IAM role management.
+#
+#   -v, --verbose
+#       Enables verbose execution logs.
+#
+#   -h, --help
+#       Displays usage information.
+#
+# .OUTPUTS
+#   Executes AWS infrastructure lifecycle
+#   operations through dedicated management
+#   modules.
+#
+#   Outputs execution status and logs to stdout.
+#
+# .NOTES
+#   Project       : aws-iam-monitor
+#   Version       : 1.0
+#   Author        : @ZouariOmar (zouariomar20@gmail.com)
+#   Created       : 14/07/2026
+#   Change Log    : 1.0 Initial release
+#
+# .EXAMPLE
+#
+#   Create IAM environment:
+#       ./awsctl --up iam
+#
+#   Remove IAM environment:
+#       ./awsctl --down iam
+#
+#   Create CloudTrail environment:
+#       ./awsctl --up cloud-trail
+#
+#   Check CloudTrail status:
+#       ./awsctl --status cloud-trail
+#
+#   Create IAM environment with roles:
+#       ./awsctl --up iam --role
+#
+#   Enable verbose output:
+#       ./awsctl --up iam --verbose
+#
+#
+# .REQUIREMENTS
+#   - AWS CLI v2
+#   - jq
+#   - sed
+#   - Configured AWS credentials
+#
+#   Required AWS permissions depend on target:
+#
+#   iam:
+#
+#       iam:CreateUser
+#       iam:CreateGroup
+#       iam:CreateRole
+#       iam:CreatePolicy
+#       iam:CreatePolicyVersion
+#       iam:Attach*
+#       iam:AddUserToGroup
+#       iam:Delete*
+#       iam:Detach*
+#
+#   cloud-trail:
+#
+#       cloudtrail:CreateTrail
+#       cloudtrail:DeleteTrail
+#       cloudtrail:StartLogging
+#       cloudtrail:StopLogging
+#       cloudtrail:PutEventSelectors
+#
+#       s3:CreateBucket
+#       s3:DeleteBucket
+#       s3:PutBucketPolicy
+#       s3:PutEncryptionConfiguration
+#
+# shellcheck disable=SC1090
+# =========================================
+set -Eeuo pipefail
+
+#####################
+### CONFIGURATION ###
+#####################
+
+# Directories
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+LIB_DIR="${LIB_DIR:-${SCRIPT_DIR}/lib}"
+IAM_DIR="${IAM_DIR:-${SCRIPT_DIR}/iam}"
+CLOUD_TRAIL_DIR="${CLOUD_TRAIL_DIR:-${SCRIPT_DIR}/cloud-trail}"
+
+# Scripts
+CLOUD_TRAIL_CTL_SCRIPT="${CLOUD_TRAIL_CTL_SCRIPT:-${CLOUD_TRAIL_DIR}/src/cloud_trail_ctl}"
+IAM_CTL_SCRIPT="${IAM_CTL_SCRIPT:-${IAM_DIR}/src/iamctl}"
+
+# Global vars
+VERBOSE=${VERBOSE:-false}
+AWS_ACCOUNT_ID=${AWS_ACCOUNT_ID:-}
+AWS_REGION=${AWS_REGION:-}
+ENABLE_ROLES=${ENABLE_ROLES:-false}
+
+######################
+### !CONFIGURATION ###
+######################
+
+check_aws_region() {
+  msg INFO "Checking AWS region..."
+
+  AWS_REGION=$(aws configure get region)
+
+  require_variable AWS_REGION
+
+  msg SUCCESS "AWS region configured successfully"
+
+  if [[ "$VERBOSE" == true ]]; then
+    msg SUCCESS "AWS region: ${AWS_REGION}"
+  fi
+}
+
+check_aws_auth() {
+  msg INFO "Checking AWS credentials..."
+
+  if aws sts get-caller-identity >/dev/null 2>&1; then
+
+    AWS_ACCOUNT_ID=$(aws sts get-caller-identity \
+      --query Account \
+      --output text)
+
+    USER=$(aws sts get-caller-identity \
+      --query Arn \
+      --output text)
+
+    msg SUCCESS "AWS authentication successfully"
+
+    if [[ "$VERBOSE" == true ]]; then
+      msg INFO "Account: $AWS_ACCOUNT_ID"
+      msg INFO "Identity: $USER"
+    fi
+
+  else
+    msg ERROR "AWS credentials are not configured"
+    msg INFO "Run: aws configure"
+    exit 1
+  fi
+}
+
+usage() {
+  cat <<EOF
+$(msg "USAGE:")
+
+  $(basename "$0") [COMMAND] [TARGET] [OPTIONS]
+
+
+$(msg "COMMANDS:")
+
+  --up
+      Create or configure resources.
+
+  --down
+      Remove resources.
+
+  --status
+      Display resource status.
+
+
+$(msg "TARGETS:")
+
+  iam
+      Manage IAM environment.
+
+      Includes:
+        - IAM policies
+        - IAM groups
+        - IAM users
+        - IAM roles (optional)
+
+
+  cloud-trail
+      Manage CloudTrail environment.
+
+      Includes:
+        - CloudTrail trail
+        - S3 audit bucket
+        - Bucket encryption
+        - Bucket policy
+        - Event selectors
+
+
+$(msg "OPTIONS:")
+
+  -r, --role
+      Enable IAM role management.
+
+  -v, --verbose
+      Enable verbose output.
+
+  -h, --help
+      Show this help message.
+
+
+$(msg "EXAMPLES:")
+
+  Create IAM environment:
+
+      $(basename "$0") --up iam
+
+
+  Remove IAM environment:
+
+      $(basename "$0") --down iam
+
+
+  Create IAM environment with roles:
+
+      $(basename "$0") --up iam --role
+
+
+  Create CloudTrail environment:
+
+      $(basename "$0") --up cloud-trail
+
+
+  Check CloudTrail status:
+
+      $(basename "$0") --status cloud-trail
+
+
+  Remove CloudTrail environment:
+
+      $(basename "$0") --down cloud-trail
+
+
+  Enable verbose output:
+
+      $(basename "$0") --up iam --verbose
+EOF
+  exit 1
+}
+
+main() {
+  local ACTION="--up"
+  local TARGET="all"
+
+  while [[ $# -gt 0 ]]; do
+    case "$1" in
+    --up | --down | --status)
+      ACTION="$1"
+
+      if [[ $# -lt 2 ]]; then
+        msg ERROR "Missing target"
+        usage
+      fi
+
+      TARGET="$2"
+      require_variable TARGET
+      shift 2
+      ;;
+
+    -v | --verbose)
+      VERBOSE=true
+      shift
+      ;;
+
+    -r | --role)
+      ENABLE_ROLES=true
+      shift
+      ;;
+
+    -h | --help)
+      usage
+      ;;
+
+    *)
+      msg ERROR "Unknown option: $1"
+      usage
+      ;;
+    esac
+  done
+
+  # Check requirements
+  check_requirements aws jq sed
+
+  check_aws_auth
+  check_aws_region
+
+  ARGS=()
+
+  if [[ "$VERBOSE" == true ]]; then
+    ARGS+=(--verbose)
+  fi
+
+  if [[ "$ENABLE_ROLES" == true ]]; then
+    ARGS+=(--role)
+  fi
+
+  case "${TARGET:-}" in
+
+  cloud-trail)
+    run_script "$CLOUD_TRAIL_CTL_SCRIPT" \
+      "$ACTION" \
+      --aws-account-id "$AWS_ACCOUNT_ID" \
+      --aws-region "$AWS_REGION" \
+      "${ARGS[@]}"
+    ;;
+
+  iam)
+    run_script "$IAM_CTL_SCRIPT" \
+      "$ACTION" \
+      --aws-account-id "$AWS_ACCOUNT_ID" \
+      "${ARGS[@]}"
+    ;;
+
+  all)
+    # IAM
+    run_script "$IAM_CTL_SCRIPT" \
+      "$ACTION" \
+      --aws-account-id "$AWS_ACCOUNT_ID" \
+      "${ARGS[@]}"
+
+    # CLOUD TRAIL
+    run_script "$CLOUD_TRAIL_CTL_SCRIPT" \
+      "$ACTION" \
+      --aws-account-id "$AWS_ACCOUNT_ID" \
+      --aws-region "$AWS_REGION" \
+      "${ARGS[@]}"
+    ;;
+
+  *)
+    msg ERROR "Unknown option: ${TARGET:-<none>}"
+    usage
+    ;;
+
+  esac
+}
+
+# Load scripts
+if [[ -s "${LIB_DIR}/common" ]]; then
+  # shellcheck disable=SC1091
+  . "${LIB_DIR}/common"
+else
+  echo "[ERROR] Missing Script: '${LIB_DIR}/common'"
+  exit 1
+fi
+load_script "${LIB_DIR}/logger"
+load_script "${LIB_DIR}/requirements"
+
+# Trap errors
+trap 'msg ERROR "Failed at line $LINENO: $BASH_COMMAND"' ERR
+
+# Banner
+cat <<EOF
+ █████╗ ██╗    ██╗███████╗    ██╗ █████╗ ███╗   ███╗    ███╗   ███╗ ██████╗ ███╗   ██╗██╗████████╗ ██████╗ ██████╗
+██╔══██╗██║    ██║██╔════╝    ██║██╔══██╗████╗ ████║    ████╗ ████║██╔═══██╗████╗  ██║██║╚══██╔══╝██╔═══██╗██╔══██╗
+███████║██║ █╗ ██║███████╗    ██║███████║██╔████╔██║    ██╔████╔██║██║   ██║██╔██╗ ██║██║   ██║   ██║   ██║██████╔╝
+██╔══██║██║███╗██║╚════██║    ██║██╔══██║██║╚██╔╝██║    ██║╚██╔╝██║██║   ██║██║╚██╗██║██║   ██║   ██║   ██║██╔══██╗
+██║  ██║╚███╔███╔╝███████║    ██║██║  ██║██║ ╚═╝ ██║    ██║ ╚═╝ ██║╚██████╔╝██║ ╚████║██║   ██║   ╚██████╔╝██║  ██║
+╚═╝  ╚═╝ ╚══╝╚══╝ ╚══════╝    ╚═╝╚═╝  ╚═╝╚═╝     ╚═╝    ╚═╝     ╚═╝ ╚═════╝ ╚═╝  ╚═══╝╚═╝   ╚═╝    ╚═════╝ ╚═╝  ╚═╝
+EOF
+
+main "$@"
