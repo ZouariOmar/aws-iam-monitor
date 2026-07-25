@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # =========================================
 # .FILE
-#   policy_management
+#   policy_ctl
 #
 # .SYNOPSIS
 #   AWS IAM managed policy lifecycle management script
@@ -59,21 +59,21 @@
 #
 #   Create or update policy:
 #
-#       ./policy_management \
+#       ./policy_ctl \
 #           --up \
 #           --policy DeveloperPolicy
 #
 #
 #   Delete policy:
 #
-#       ./policy_management \
+#       ./policy_ctl \
 #           --down \
 #           --policy DeveloperPolicy
 #
 #
 #   Enable verbose mode:
 #
-#       ./policy_management \
+#       ./policy_ctl \
 #           --up \
 #           --policy DeveloperPolicy \
 #           --verbose
@@ -111,13 +111,22 @@
 # =========================================
 set -Eeuo pipefail
 
+#####################
+### CONFIGURATION ###
+#####################
+
 # Directories
 LIB_DIR="${LIB_DIR:-lib}"
-POLICIES_DIR="${POLICIES_DIR:-policies}"
+IAM_DIR="${IAM_DIR:-iam}"
+POLICIES_DIR="${POLICIES_DIR:-${IAM_DIR}/policies}"
 
 # Global vars
 VERBOSE=${VERBOSE:-false}
 AWS_ACCOUNT_ID=${AWS_ACCOUNT_ID:-}
+
+######################
+### !CONFIGURATION ###
+######################
 
 # Load scripts
 if [[ -s "${LIB_DIR}/common" ]]; then
@@ -359,12 +368,7 @@ main() {
 
     --policy)
       POLICY="$2"
-
-      if [[ -z "$POLICY" ]]; then
-        msg ERROR "Policy is required."
-        usage
-      fi
-
+      require_variable POLICY
       shift 2
       ;;
 

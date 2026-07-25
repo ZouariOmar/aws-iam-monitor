@@ -1,0 +1,462 @@
+#!/usr/bin/env bash
+# =========================================
+# .FILE
+#   iamctl
+#
+# .SYNOPSIS
+#   AWS IAM lifecycle orchestration command
+#
+# .DESCRIPTION
+#   Provides a unified command-line interface for
+#   managing the AWS IAM environment lifecycle.
+#
+#   The script orchestrates IAM resource management
+#   operations by executing dedicated management
+#   modules:
+#
+#       - user_management
+#       - group_management
+#       - role_management
+#       - policy_management
+#
+#   Supported lifecycle operations:
+#
+#       --up
+#           Creates and configures IAM users, groups,
+#           roles, and policies.
+#
+#       --down
+#           Removes IAM users, groups, roles,
+#           and policies created by the setup workflow.
+#
+#   Supports verbose execution mode for detailed
+#   lifecycle logs, AWS account information, and
+#   debugging output.
+#
+#   This script is part of aws-iam-monitor,
+#   a real-time AWS IAM auditing and monitoring project.
+#
+# .INPUTS
+#   Commands:
+#
+#   --up
+#       Executes IAM setup workflow.
+#
+#       Creates:
+#           - IAM policies
+#           - IAM groups
+#           - IAM roles (optional)
+#           - IAM users
+#
+#   --down
+#       Executes IAM teardown workflow.
+#
+#       Removes:
+#           - IAM users
+#           - IAM roles
+#           - IAM groups
+#           - IAM policies
+#
+#   -v, --verbose
+#       Enables verbose lifecycle execution logs.
+#
+#   -h, --help
+#       Displays usage information.
+#
+# .OUTPUTS
+#   Executes IAM lifecycle operations through
+#   dedicated management scripts.
+#
+#   Outputs execution status and logs to stdout.
+#
+# .NOTES
+#   Project       : aws-iam-monitor
+#   Version       : 1.0
+#   Author        : @ZouariOmar (zouariomar20@gmail.com)
+#   Created       : 14/07/2026
+#   Change Log    : 1.0 Initial release
+#
+# .EXAMPLE
+#
+#   Create IAM environment:
+#
+#       ./iamctl --up
+#
+#
+#   Remove IAM environment:
+#
+#       ./iamctl --down
+#
+#
+#   Create IAM environment with verbose logs:
+#
+#       ./iamctl --up --verbose
+#
+#
+#   Remove IAM environment with verbose logs:
+#
+#       ./iamctl --down -v
+#
+#
+# .REQUIREMENTS
+#   - AWS CLI v2
+#   - Configured AWS credentials
+#
+#   Required IAM permissions depend on selected action:
+#
+#       --up:
+#           iam:CreateUser
+#           iam:CreateGroup
+#           iam:CreateRole
+#           iam:CreatePolicy
+#           iam:CreatePolicyVersion
+#           iam:Attach*
+#           iam:AddUserToGroup
+#
+#       --down:
+#           iam:DeleteUser
+#           iam:DeleteGroup
+#           iam:DeleteRole
+#           iam:DeletePolicy
+#           iam:DeletePolicyVersion
+#           iam:Detach*
+#           iam:RemoveUserFromGroup
+#
+# shellcheck disable=SC1090
+# =========================================
+set -Eeuo pipefail
+
+#####################
+### CONFIGURATION ###
+#####################
+
+# Directories
+LIB_DIR="${LIB_DIR:-lib}"
+IAM_DIR="${IAM_DIR:-iam}"
+IAM_RES_DIR="${IAM_RES_DIR:-${IAM_DIR}/res}"
+IAM_SRC_DIR="${IAM_SRC_DIR:-${IAM_DIR}/src}"
+
+# Scripts
+POLICY_MANAGEMENT_SCRIPT="${POLICY_MANAGEMENT_SCRIPT:-${IAM_SRC_DIR}/policy_ctl}"
+GROUP_MANAGEMENT_SCRIPT="${GROUP_MANAGEMENT_SCRIPT:-${IAM_SRC_DIR}/group_ctl}"
+ROLE_MANAGEMENT_SCRIPT="${ROLE_MANAGEMENT_SCRIPT:-${IAM_SRC_DIR}/role_ctl}"
+USER_MANAGEMENT_SCRIPT="${USER_MANAGEMENT_SCRIPT:-${IAM_SRC_DIR}/user_ctl}"
+
+# Resources
+USERS_CSV_FILE="${USERS_CSV_FILE:-${IAM_RES_DIR}/users.csv}"
+GROUPS_CSV_FILE="${GROUPS_CSV_FILE:-${IAM_RES_DIR}/groups.csv}"
+ROLES_CSV_FILE="${ROLES_CSV_FILE:-${IAM_RES_DIR}/roles.csv}"
+
+# Global vars
+VERBOSE=${VERBOSE:-false}
+
+# AWS vars
+AWS_ACCOUNT_ID=${AWS_ACCOUNT_ID:-}
+ENABLE_ROLES=${ENABLE_ROLES:-false}
+
+######################
+### !CONFIGURATION ###
+######################
+
+iam_setup() {
+  local ACTION=$1
+
+  msg INFO "$([ "$ACTION" == "--up" ] &&
+    echo "Starting IAM Setup..." ||
+    echo "Starting IAM cleanup...")"
+
+  ARGS=()
+
+  if [[ "$VERBOSE" == true ]]; then
+    ARGS+=(--verbose)
+  fi
+
+  # Policies and groups
+  while IFS=', ' read -r GROUP POLICY; do
+    if [[ "$VERBOSE" == true ]]; then
+      msg INFO "GROUP: $GROUP | POLICY: $POLICY"
+    fi
+
+    # Create/Delete Policy
+    run_script \
+      "$POLICY_MANAGEMENT_SCRIPT" \
+      "$ACTION" \
+      --aws-account-id "$AWS_ACCOUNT_ID" \
+      --policy "$POLICY" \
+      "${ARGS[@]}"
+
+    # Create/Delete Group
+    run_script \
+      "$GROUP_MANAGEMENT_SCRIPT" \
+      "$ACTION" \
+      --aws-account-id "$AWS_ACCOUNT_ID" \
+      --group "$GROUP" \
+      --policy "$POLICY" \
+      "${ARGS[@]}"
+  done < <(tail -n +2 "$GROUPS_CSV_FILE")
+
+  # Users
+  while IFS=', ' read -r USER GROUP; do
+    if [[ "$VERBOSE" == true ]]; then
+      msg INFO "USER: $USER | GROUP: $GROUP"
+    fi
+
+    # Create/Delete User
+    run_script \
+      "$USER_MANAGEMENT_SCRIPT" \
+      "$ACTION" \
+      --user "$USER" \
+      --group "$GROUP" \
+      "${ARGS[@]}"
+  done < <(tail -n +2 "$USERS_CSV_FILE")
+
+  # Roles
+  if [[ "$ENABLE_ROLES" == true ]]; then
+    while IFS=', ' read -r ROLE POLICY; do
+      if [[ "$VERBOSE" == true ]]; then
+        msg INFO "ROLE: $ROLE | POLICY: $POLICY"
+      fi
+
+      # Reset role policy argument foreach role
+      ARGS=()
+
+      if [[ "$VERBOSE" == true ]]; then
+        ARGS+=(--verbose)
+      fi
+
+      if [[ "$ACTION" == "--up" ]]; then
+        ARGS+=(--policy "$POLICY")
+      fi
+
+      # Create/Delete Role
+      run_script "$ROLE_MANAGEMENT_SCRIPT" \
+        "$ACTION" \
+        --aws-account-id "$AWS_ACCOUNT_ID" \
+        --role "$ROLE" \
+        "${ARGS[@]}"
+    done < <(tail -n +2 "$ROLES_CSV_FILE")
+  fi
+
+  msg SUCCESS "$([ "$ACTION" == "--up" ] &&
+    echo "IAM Setup Complete!" ||
+    echo "IAM teardown complete!")"
+}
+
+iam_status() {
+  msg INFO "Checking IAM resources..."
+
+  # Policies
+  while IFS=', ' read -r GROUP POLICY; do
+    if aws iam get-policy \
+      --policy-arn "arn:aws:iam::${AWS_ACCOUNT_ID}:policy/${POLICY}" \
+      >/dev/null 2>&1; then
+      msg SUCCESS "Policy exists: $POLICY"
+    else
+      msg ERROR "Policy missing: $POLICY"
+    fi
+  done < <(tail -n +2 "$GROUPS_CSV_FILE")
+
+  # Groups
+  while IFS=', ' read -r GROUP POLICY; do
+    if aws iam get-group \
+      --group-name "$GROUP" \
+      >/dev/null 2>&1; then
+      msg SUCCESS "Group exists: $GROUP"
+    else
+      msg ERROR "Group missing: $GROUP"
+    fi
+  done < <(tail -n +2 "$GROUPS_CSV_FILE")
+
+  # Users
+  while IFS=', ' read -r USER GROUP; do
+    if aws iam get-user \
+      --user-name "$USER" \
+      >/dev/null 2>&1; then
+      msg SUCCESS "User exists: $USER"
+    else
+      msg ERROR "User missing: $USER"
+    fi
+  done < <(tail -n +2 "$USERS_CSV_FILE")
+
+  # Roles
+  if [[ "$ENABLE_ROLES" == true ]]; then
+    while IFS=', ' read -r ROLE POLICY; do
+      if aws iam get-role \
+        --role-name "$ROLE" \
+        >/dev/null 2>&1; then
+        msg SUCCESS "Role exists: $ROLE"
+      else
+        msg ERROR "Role missing: $ROLE"
+      fi
+    done < <(tail -n +2 "$ROLES_CSV_FILE")
+  fi
+
+  msg SUCCESS "IAM status check complete"
+}
+
+usage() {
+  cat <<EOF
+$(msg "USAGE:")
+
+  $(basename "$0") ACTION [OPTIONS]
+
+
+$(msg "ACTIONS:")
+
+  --up
+      Create IAM environment.
+
+      Creates:
+        - IAM policies
+        - IAM groups
+        - IAM users
+        - IAM roles (optional)
+
+
+  --down
+      Remove IAM environment.
+
+      Removes:
+        - IAM users
+        - IAM roles (optional)
+        - IAM groups
+        - IAM policies
+
+
+$(msg "OPTIONS:")
+
+  --aws-account-id <id>
+      AWS account identifier.
+
+  --role
+      Enable IAM role management.
+
+  -v, --verbose
+      Enable verbose output.
+
+  -h, --help
+      Show this help message.
+
+
+$(msg "RESOURCE FILES:")
+
+  users.csv
+      User definitions.
+
+      Format:
+        USER,GROUP
+
+  groups.csv
+      Group and policy mappings.
+
+      Format:
+        GROUP,POLICY
+
+  roles.csv
+      Role definitions.
+
+      Format:
+        ROLE,POLICY
+
+
+$(msg "EXAMPLES:")
+
+  Create IAM environment:
+
+      $(basename "$0") --up
+
+
+  Remove IAM environment:
+
+      $(basename "$0") --down
+
+
+  Create IAM environment with roles:
+
+      $(basename "$0") --up --role
+
+
+  Run with verbose logs:
+
+      $(basename "$0") --up --verbose
+EOF
+  exit 1
+}
+
+main() {
+  while [[ $# -gt 0 ]]; do
+    case "$1" in
+    --aws-account-id)
+      AWS_ACCOUNT_ID="$2"
+      shift
+      ;;
+
+    -v | --verbose)
+      VERBOSE=true
+      ;;
+
+    --up | --down | --status)
+      ACTION="$1"
+      ;;
+
+    --role)
+      ENABLE_ROLES=true
+      ;;
+
+    -h | --help)
+      usage
+      ;;
+
+    *)
+      msg ERROR "Unknown option: $1"
+      usage
+      ;;
+    esac
+    shift
+  done
+
+  case "${ACTION:-}" in
+  --up | --down)
+    iam_setup "$ACTION"
+    ;;
+
+  --status)
+    iam_status
+    ;;
+
+  *)
+    msg ERROR "Missing action (--up or --down)"
+    usage
+    ;;
+  esac
+
+  msg ======================================================================
+  msg INFO "IAM Console...https://console.aws.amazon.com/iam/home"
+  msg INFO "Users.........https://console.aws.amazon.com/iam/home#/users"
+  msg INFO "Groups........https://console.aws.amazon.com/iam/home#/groups"
+  msg INFO "Roles.........https://console.aws.amazon.com/iam/home#/roles"
+  msg INFO "Policies......https://console.aws.amazon.com/iam/home#/policies"
+  msg ======================================================================
+}
+
+# Load scripts
+if [[ -s "${LIB_DIR}/common" ]]; then
+  # shellcheck disable=SC1091
+  . "${LIB_DIR}/common"
+else
+  echo "[ERROR] Missing Script: '${LIB_DIR}/common'"
+  exit 1
+fi
+load_script "${LIB_DIR}/logger"
+
+# Banner
+cat <<EOF
+██╗ █████╗ ███╗   ███╗    ███╗   ███╗ █████╗ ███╗   ██╗ █████╗  ██████╗ ███████╗██████╗
+██║██╔══██╗████╗ ████║    ████╗ ████║██╔══██╗████╗  ██║██╔══██╗██╔════╝ ██╔════╝██╔══██╗
+██║███████║██╔████╔██║    ██╔████╔██║███████║██╔██╗ ██║███████║██║  ███╗█████╗  ██████╔╝
+██║██╔══██║██║╚██╔╝██║    ██║╚██╔╝██║██╔══██║██║╚██╗██║██╔══██║██║   ██║██╔══╝  ██╔══██╗
+██║██║  ██║██║ ╚═╝ ██║    ██║ ╚═╝ ██║██║  ██║██║ ╚████║██║  ██║╚██████╔╝███████╗██║  ██║
+╚═╝╚═╝  ╚═╝╚═╝     ╚═╝    ╚═╝     ╚═╝╚═╝  ╚═╝╚═╝  ╚═══╝╚═╝  ╚═╝ ╚═════╝ ╚══════╝╚═╝  ╚═╝
+EOF
+
+main "$@"

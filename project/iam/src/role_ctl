@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # =========================================
 # .FILE
-#   role_management
+#   role_ctl
 #
 # .SYNOPSIS
 #   AWS IAM role lifecycle management script
@@ -69,20 +69,20 @@
 #
 #   Create a role:
 #
-#       ./role_management \
+#       ./role_ctl \
 #           --up \
 #           --role EC2-AppRole \
 #           --policy DeveloperPolicy
 #
 #   Delete a role:
 #
-#       ./role_management \
+#       ./role_ctl \
 #           --down \
 #           --role EC2-AppRole
 #
 #   Enable verbose mode:
 #
-#       ./role_management \
+#       ./role_ctl \
 #           --up \
 #           --role EC2-AppRole \
 #           --policy DeveloperPolicy \
@@ -121,9 +121,14 @@
 # =========================================
 set -Eeuo pipefail
 
+#####################
+### CONFIGURATION ###
+#####################
+
 # Directories
 LIB_DIR="${LIB_DIR:-lib}"
-POLICIES_DIR="${POLICIES_DIR:-policies}"
+IAM_DIR="${IAM_DIR:-iam}"
+POLICIES_DIR="${POLICIES_DIR:-${IAM_DIR}/policies}"
 
 # Files
 TRUST_POLICY_FILE="${POLICIES_DIR}/trust-policy.json"
@@ -131,6 +136,10 @@ TRUST_POLICY_FILE="${POLICIES_DIR}/trust-policy.json"
 # Global vars
 VERBOSE=${VERBOSE:-false}
 AWS_ACCOUNT_ID=${AWS_ACCOUNT_ID:-}
+
+######################
+### !CONFIGURATION ###
+######################
 
 # Load scripts
 if [[ -s "${LIB_DIR}/common" ]]; then
@@ -333,23 +342,13 @@ main() {
 
     --role)
       ROLE="$2"
-
-      if [[ -z "$ROLE" ]]; then
-        msg ERROR "Role is required."
-        usage
-      fi
-
+      require_variable ROLE
       shift 2
       ;;
 
     --policy)
       POLICY="$2"
-
-      if [[ -z "$POLICY" ]]; then
-        msg ERROR "Policy are required."
-        usage
-      fi
-
+      require_variable POLICY
       shift 2
       ;;
 

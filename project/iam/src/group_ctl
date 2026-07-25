@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # =========================================
 # .FILE
-#   group_management
+#   group_ctl
 #
 # .SYNOPSIS
 #   AWS IAM group lifecycle management script
@@ -67,7 +67,7 @@
 #
 #   Create group with policy:
 #
-#       ./group_management \
+#       ./group_ctl \
 #           --up \
 #           --group DevGroup \
 #           --policy DeveloperPolicy
@@ -75,14 +75,14 @@
 #
 #   Delete group:
 #
-#       ./group_management \
+#       ./group_ctl \
 #           --down \
 #           --group DevGroup
 #
 #
 #   Enable verbose mode:
 #
-#       ./group_management \
+#       ./group_ctl \
 #           --up \
 #           --group DevGroup \
 #           --policy DeveloperPolicy \
@@ -116,12 +116,20 @@
 # =========================================
 set -Eeuo pipefail
 
+#####################
+### CONFIGURATION ###
+#####################
+
 # Directories
 LIB_DIR="${LIB_DIR:-lib}"
 
 # Global vars
 VERBOSE=${VERBOSE:-false}
 AWS_ACCOUNT_ID=${AWS_ACCOUNT_ID:-}
+
+######################
+### !CONFIGURATION ###
+######################
 
 # Load scripts
 if [[ -s "${LIB_DIR}/common" ]]; then
@@ -301,23 +309,13 @@ main() {
 
     --group)
       GROUP="$2"
-
-      if [[ -z "$GROUP" ]]; then
-        msg ERROR "Group is required."
-        usage
-      fi
-
+      require_variable GROUP
       shift 2
       ;;
 
     --policy)
       POLICY="$2"
-
-      if [[ -z "$POLICY" ]]; then
-        msg ERROR "Policy are required."
-        usage
-      fi
-
+      require_variable POLICY
       shift 2
       ;;
 

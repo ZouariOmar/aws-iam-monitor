@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # =========================================
 # .FILE
-#   user_management
+#   user_ctl
 #
 # .SYNOPSIS
 #   AWS IAM user lifecycle management script
@@ -62,21 +62,21 @@
 #
 #   Create a user:
 #
-#       ./user_management \
+#       ./user_ctl \
 #           --up \
 #           --user DevAdmin \
 #           --group DevGroup
 #
 #   Delete a user:
 #
-#       ./user_management \
+#       ./user_ctl \
 #           --down \
 #           --user DevAdmin \
 #           --group DevGroup
 #
 #   Enable verbose mode:
 #
-#       ./user_management \
+#       ./user_ctl \
 #           --up \
 #           --user DevAdmin \
 #           --group DevGroup \
@@ -108,21 +108,19 @@
 # =========================================
 set -Eeuo pipefail
 
+#####################
+### CONFIGURATION ###
+#####################
+
 # Directories
 LIB_DIR="${LIB_DIR:-lib}"
 
 # Global vars
 VERBOSE=${VERBOSE:-false}
 
-# Load scripts
-if [[ -s "${LIB_DIR}/common" ]]; then
-  # shellcheck disable=SC1091
-  . "${LIB_DIR}/common"
-else
-  echo "[ERROR] Missing Script: '${LIB_DIR}/common'"
-  exit 1
-fi
-load_script "${LIB_DIR}/logger"
+######################
+### !CONFIGURATION ###
+######################
 
 usage() {
   cat <<EOF
@@ -186,10 +184,14 @@ create_user() {
     --user-name "$USERNAME" >/dev/null 2>&1; then
 
     aws iam create-user \
-      --user-name "$USERNAME" >/dev/null
+      --user-name "$USERNAME" >/dev/null || {
+      msg ERROR "Failed creating IAM user: $USERNAME"
+      exit 1
+    }
 
-    [[ "$VERBOSE" == true ]] &&
+    if [[ "$VERBOSE" == true ]]; then
       msg SUCCESS "Created user: $USERNAME"
+    fi
 
   else
     msg INFO "User exists: $USERNAME"
@@ -197,16 +199,17 @@ create_user() {
 
   if ! aws iam get-group \
     --group-name "$GROUP_NAME" \
-    --query "Users[?UserName=='$USERNAME']" \
-    --output text |
-    grep -q "$USERNAME"; then
+    --output json |
+    jq -e --arg USERNAME "$USERNAME" \
+      '.Users // [] | any(.UserName == $USERNAME)' >/dev/null 2>&1; then
 
     aws iam add-user-to-group \
       --group-name "$GROUP_NAME" \
       --user-name "$USERNAME"
 
-    [[ "$VERBOSE" == true ]] &&
+    if [[ "$VERBOSE" == true ]]; then
       msg SUCCESS "Added $USERNAME to $GROUP_NAME"
+    fi
   fi
 }
 
@@ -218,17 +221,38 @@ delete_user() {
     --user-name "$USERNAME" >/dev/null 2>&1; then
 
     msg INFO "User '$USERNAME' does not exist."
+
     return
   fi
 
-  aws iam remove-user-from-group \
+  msg INFO "Removing user '$USERNAME' from group '$GROUP_NAME'"
+
+  if aws iam get-group \
     --group-name "$GROUP_NAME" \
-    --user-name "$USERNAME" 2>/dev/null || true
+    --output json 2>/dev/null |
+    jq -e --arg USERNAME "$USERNAME" \
+      '.Users[].UserName | select(. == $USERNAME)' >/dev/null 2>&1; then
+
+    aws iam remove-user-from-group \
+      --group-name "$GROUP_NAME" \
+      --user-name "$USERNAME" || {
+      msg ERROR "Failed removing '$USERNAME' from '$GROUP_NAME'"
+      exit 1
+    }
+
+    [[ "$VERBOSE" == true ]] &&
+      msg SUCCESS "Removed $USERNAME from $GROUP_NAME"
+  fi
+
+  msg INFO "Deleting user: $USERNAME"
 
   aws iam delete-user \
-    --user-name "$USERNAME"
+    --user-name "$USERNAME" >/dev/null 2>&1 || {
+    msg ERROR "Failed deleting user: $USERNAME"
+    exit 1
+  }
 
-  if [[ "$VERBOSE" == true ]]; then
+  if [ "$VERBOSE" == true ]; then
     msg SUCCESS "Deleted user: $USERNAME"
   fi
 }
@@ -248,23 +272,13 @@ main() {
 
     --user)
       USER="$2"
-
-      if [[ -z "$USER" ]]; then
-        msg ERROR "Missing value for --user"
-        usage
-      fi
-
+      require_variable USER
       shift 2
       ;;
 
     --group)
       GROUP="$2"
-
-      if [[ -z "$GROUP" ]]; then
-        msg ERROR "Missing value for --group"
-        usage
-      fi
-
+      require_variable GROUP
       shift 2
       ;;
 
@@ -282,7 +296,6 @@ main() {
   case "${ACTION:-}" in
   --up)
     msg INFO "Creating IAM user: $USER"
-    msg INFO "Adding user to group: $GROUP"
     create_user "$USER" "$GROUP"
     ;;
 
@@ -297,5 +310,15 @@ main() {
     ;;
   esac
 }
+
+# Load scripts
+if [[ -s "${LIB_DIR}/common" ]]; then
+  # shellcheck disable=SC1091
+  . "${LIB_DIR}/common"
+else
+  echo "[ERROR] Missing Script: '${LIB_DIR}/common'"
+  exit 1
+fi
+load_script "${LIB_DIR}/logger"
 
 main "$@"
