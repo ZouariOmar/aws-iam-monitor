@@ -1,0 +1,35 @@
+#!/usr/bin/env bash
+set -Eeuo pipefail
+
+#####################
+### Configuration ###
+#####################
+
+# Directories
+LIB_DIR="${LIB_DIR:-lib}"
+
+# EventBridge vars
+RULE_NAME=${RULE_NAME:-"aws-iam-monitor-rule"}
+
+######################
+### !Configuration ###
+######################
+
+# Load scripts
+if [[ -s "${LIB_DIR}/common" ]]; then
+  # shellcheck disable=SC1091
+  . "${LIB_DIR}/common"
+else
+  echo "[ERROR] Missing Script: '${LIB_DIR}/common'"
+  exit 1
+fi
+load_script "${LIB_DIR}/logger"
+
+if aws events describe-rule \
+  --name "$RULE_NAME" >/dev/null 2>&1; then
+  msg SUCCESS "EventBridge rule exists: ${RULE_NAME}"
+  exit 0
+fi
+
+msg ERROR "EventBridge rule does not exist: ${RULE_NAME}"
+exit 1
