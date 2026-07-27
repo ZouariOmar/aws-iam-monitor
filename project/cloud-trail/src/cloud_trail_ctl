@@ -4,53 +4,64 @@
 #   cloud_trail_ctl
 #
 # .SYNOPSIS
-#   AWS CloudTrail environment management
-#   automation script.
+#   AWS CloudTrail management automation
+#   script.
 #
 # .DESCRIPTION
-#   Creates, configures, monitors, and removes
-#   an AWS CloudTrail audit environment.
+#   Creates, configures, monitors, and
+#   removes an AWS CloudTrail trail.
 #
 #   The script:
-#     - Creates an S3 bucket for CloudTrail logs
-#     - Enables S3 server-side encryption
-#     - Configures the CloudTrail bucket policy
-#     - Creates and configures a CloudTrail trail
-#     - Enables management event logging
-#     - Starts and stops CloudTrail logging
-#     - Removes CloudTrail resources when requested
+#     - Creates a CloudTrail trail
+#     - Configures management event logging
+#     - Starts CloudTrail logging
+#     - Displays trail status
+#     - Stops CloudTrail logging
+#     - Deletes the CloudTrail trail
 #
-#   Designed for IAM security monitoring by
-#   collecting AWS API activity into S3 for
-#   further EventBridge/Lambda processing.
+#   S3 bucket provisioning is delegated
+#   to the s3_bucket_ctl script.
+#
+#   Designed for IAM security monitoring
+#   by collecting AWS API activity into
+#   Amazon S3 for further EventBridge and
+#   AWS Lambda processing.
 #
 # .USAGE
 #   ./cloud_trail_ctl [OPTIONS] ACTION
 #
 # .ACTIONS
 #   --up
-#       Create and configure CloudTrail resources.
+#       Create and configure the
+#       CloudTrail trail.
 #
 #   --down
-#       Stop logging and remove CloudTrail resources.
+#       Stop logging and delete the
+#       CloudTrail trail.
 #
 #   --status
-#       Display CloudTrail logging status.
+#       Display CloudTrail trail status.
 #
 # .OPTIONS
 #   --aws-account-id <id>
-#       AWS account ID used for CloudTrail
-#       resource naming.
+#       AWS account ID.
+#
+#   --aws-region <region>
+#       AWS region where the trail
+#       resides.
 #
 #   --event-selectors-rw-type <type>
-#       CloudTrail event selector mode.
-#       Values:
+#       Management event read/write mode.
+#       Allowed values:
 #         - All
 #         - ReadOnly
 #         - WriteOnly
 #
 #   --bucket-encryption-sse-algorithm <algorithm>
-#       S3 default encryption algorithm.
+#       Default S3 bucket server-side
+#       encryption algorithm.
+#       Passed to s3_bucket_ctl.
+#
 #       Default:
 #         AES256
 #
@@ -65,18 +76,16 @@
 #
 # .OUTPUTS
 #   --up:
-#       Configured CloudTrail trail and S3 log bucket.
+#       Configured CloudTrail trail.
 #
 #   --status:
-#       CloudTrail logging status information.
+#       CloudTrail trail status.
 #
 #   --down:
-#       Removed CloudTrail trail and S3 bucket.
+#       Removed CloudTrail trail.
 #
 # .FILES
 #   policies/cloud-trail/
-#       bucket-policy.json
-#       bucket-encryption.json
 #       event-selectors.json
 #
 # .NOTES
@@ -101,11 +110,16 @@ set -Eeuo pipefail
 # Directories
 LIB_DIR="${LIB_DIR:-lib}"
 CLOUD_TRAIL_DIR="${CLOUD_TRAIL_DIR:-cloud-trail}"
+CLOUD_TRAIL_SRC_DIR="${CLOUD_TRAIL_SRC_DIR:-${CLOUD_TRAIL_DIR}/src}"
 CLOUD_TRAIL_POLICIES_DIR="${CLOUD_TRAIL_POLICIES_DIR:-${CLOUD_TRAIL_DIR}/policies}"
 
+# Scripts
+POLICY_MANAGEMENT_SCRIPT="${POLICY_MANAGEMENT_SCRIPT:-${CLOUD_TRAIL_POLICIES_DIR}/policy_ctl}"
+
+# Scripts
+S3_BUCKET_MANAGEMENT_SCRIPT="${S3_BUCKET_MANAGEMENT_SCRIPT:-${CLOUD_TRAIL_SRC_DIR}/s3_bucket_ctl}"
+
 # Files
-TRAIL_BUCKET_POLICY_FILE="${CLOUD_TRAIL_POLICIES_DIR}/bucket-policy.json"
-TRAIL_BUCKET_ENCRYPTION_FILE="${CLOUD_TRAIL_POLICIES_DIR}/bucket-encryption.json"
 TRAIL_EVENT_SELECTORS_FILE="${CLOUD_TRAIL_POLICIES_DIR}/event-selectors.json"
 
 # Global vars
@@ -125,119 +139,77 @@ TRAIL_BUCKET_NAME=${TRAIL_BUCKET_NAME:-}
 ### !Configuration ###
 ######################
 
-create_s3_bucket() {
-  if aws s3api head-bucket \
-    --bucket "${TRAIL_BUCKET_NAME}" >/dev/null 2>&1; then
-    msg INFO "Bucket already exists"
+usage() {
+  cat <<EOF
+$(msg "USAGE:")
+  $(basename "$0") [OPTIONS] ACTION
 
-  else
-    msg INFO "Creating CloudTrail S3 bucket"
+$(msg "ACTIONS:")
+  --up
+      Create and configure the CloudTrail trail.
 
-    aws s3api create-bucket \
-      --bucket "${TRAIL_BUCKET_NAME}" \
-      --region "${AWS_REGION}" >/dev/null
+  --down
+      Stop logging and delete the CloudTrail trail.
 
-    msg SUCCESS "Bucket created"
-  fi
+  --status
+      Display CloudTrail trail status.
 
-  # Enable bucket encryption
-  msg INFO "Enabling S3 encryption"
+$(msg "OPTIONS:")
+  --aws-account-id <id>
+      AWS account ID.
 
-  aws s3api put-bucket-encryption \
-    --bucket "${TRAIL_BUCKET_NAME}" \
-    --server-side-encryption-configuration "$(
-      sed "s/{{TRAIL_BUCKET_ENCRYPTION_SSE_ALGORITHM}}/${TRAIL_BUCKET_ENCRYPTION_SSE_ALGORITHM}/g" \
-        "$TRAIL_BUCKET_ENCRYPTION_FILE"
-    )" >/dev/null
+  --aws-region <region>
+      AWS region where the trail resides.
 
-  # Add bucket policy
-  msg INFO "Configuring bucket policy"
+  --event-selectors-rw-type <type>
+      Management event read/write mode.
+      Allowed values:
+        - All
+        - ReadOnly
+        - WriteOnly
 
-  if aws s3api get-bucket-policy \
-    --bucket "${TRAIL_BUCKET_NAME}" >/dev/null 2>&1; then
-    msg INFO "Bucket policy already exists"
+  --bucket-encryption-sse-algorithm <algorithm>
+      Default S3 bucket server-side
+      encryption algorithm.
+      Passed to s3_bucket_ctl.
 
-  else
-    msg INFO "Putting bucket policy"
+      Default:
+        AES256
 
-    aws s3api put-bucket-policy \
-      --bucket "${TRAIL_BUCKET_NAME}" \
-      --policy "$(
-        sed \
-          -e "s/{{AWS_ACCOUNT_ID}}/${AWS_ACCOUNT_ID}/g" \
-          -e "s/{{TRAIL_BUCKET_NAME}}/${TRAIL_BUCKET_NAME}/g" \
-          "$TRAIL_BUCKET_POLICY_FILE"
-      )" || {
-      msg ERROR "Failed creating bucket policy"
-      exit 1
-    }
+  -v, --verbose
+      Enable verbose output.
 
-    msg SUCCESS "Bucket policy created"
-  fi
-}
+  -h, --help
+      Display this help message.
 
-delete_s3_bucket() {
-  msg INFO "Deleting CloudTrail S3 bucket"
+$(msg "EXAMPLES:")
+  Create a CloudTrail trail:
+    $(basename "$0") \\
+      --aws-account-id 123456789012 \\
+      --aws-region us-east-1 \\
+      --up
 
-  if aws s3api head-bucket \
-    --bucket "${TRAIL_BUCKET_NAME}" >/dev/null 2>&1; then
+  Create a write-only management trail:
+    $(basename "$0") \\
+      --aws-account-id 123456789012 \\
+      --aws-region us-east-1 \\
+      --event-selectors-rw-type WriteOnly \\
+      --up
 
-    # Remove bucket policy
-    msg INFO "Removing bucket policy"
+  Show trail status:
+    $(basename "$0") \\
+      --aws-region us-east-1 \\
+      --status
 
-    if aws s3api get-bucket-policy \
-      --bucket "${TRAIL_BUCKET_NAME}" >/dev/null 2>&1; then
-
-      aws s3api delete-bucket-policy \
-        --bucket "${TRAIL_BUCKET_NAME}" >/dev/null
-
-      msg SUCCESS "Bucket policy removed"
-
-    else
-      msg INFO "Bucket policy does not exist"
-    fi
-
-    # Remove encryption
-    msg INFO "Removing bucket encryption"
-
-    if aws s3api get-bucket-encryption \
-      --bucket "${TRAIL_BUCKET_NAME}" >/dev/null 2>&1; then
-
-      aws s3api delete-bucket-encryption \
-        --bucket "${TRAIL_BUCKET_NAME}" >/dev/null
-
-      msg SUCCESS "Bucket encryption removed"
-
-    else
-      msg INFO "Bucket encryption does not exist"
-    fi
-
-    # Delete objects
-    msg INFO "Deleting bucket objects"
-
-    aws s3 rm \
-      "s3://${TRAIL_BUCKET_NAME}" \
-      --recursive >/dev/null
-
-    msg SUCCESS "Bucket objects removed"
-
-    # Delete bucket
-    msg INFO "Deleting S3 bucket"
-
-    aws s3api delete-bucket \
-      --bucket "${TRAIL_BUCKET_NAME}"
-
-    msg SUCCESS "S3 bucket deleted"
-
-  else
-    msg INFO "S3 bucket does not exist"
-  fi
+  Delete the CloudTrail trail:
+    $(basename "$0") \\
+      --aws-region us-east-1 \\
+      --down
+EOF
 }
 
 create_trail() {
-  create_s3_bucket
-
-  msg INFO "Configuring CloudTrail"
+  msg INFO "Creating Trail..."
 
   if aws cloudtrail describe-trails \
     --trail-name-list "${TRAIL_NAME}" \
@@ -275,9 +247,7 @@ create_trail() {
 }
 
 delete_trail() {
-  delete_s3_bucket
-
-  msg INFO "Deleting Trail"
+  msg INFO "Deleting Trail..."
 
   # Stop logging
   if aws cloudtrail get-trail-status \
@@ -299,8 +269,6 @@ delete_trail() {
     --trail-name-list "${TRAIL_NAME}" \
     --query "trailList[0].Name" \
     --output text | grep -q "${TRAIL_NAME}"; then
-
-    msg INFO "Deleting CloudTrail trail"
 
     aws cloudtrail delete-trail \
       --name "${TRAIL_NAME}" >/dev/null
@@ -324,65 +292,12 @@ trail_status() {
     return
   fi
 
+  msg SUCCESS "Trail exists"
+
   msg INFO "Trail Status:"
   aws cloudtrail get-trail-status \
     --name "$TRAIL_NAME" \
     --region "$AWS_REGION"
-}
-
-usage() {
-  cat <<EOF
-$(msg "USAGE:")
-  $(basename "$0") [OPTIONS] ACTION
-
-$(msg "ACTIONS:")
-  --up
-      Create and configure CloudTrail resources.
-
-  --down
-      Stop logging and delete CloudTrail resources.
-
-  --status
-      Display CloudTrail logging status.
-
-$(msg "OPTIONS:")
-  --aws-account-id <id>
-      AWS account ID used for CloudTrail resources.
-
-  --event-selectors-rw-type <type>
-      CloudTrail event selector read/write mode.
-      Allowed values:
-        - All
-        - ReadOnly
-        - WriteOnly
-
-  --bucket-encryption-sse-algorithm <algorithm>
-      S3 bucket encryption algorithm.
-      Default:
-        AES256
-
-  -v, --verbose
-      Enable verbose output.
-
-  -h, --help
-      Display this help message.
-
-$(msg "EXAMPLES:")
-  Create CloudTrail:
-    $(basename "$0") --up
-
-  Create IAM write-event monitoring:
-    $(basename "$0") \
-      --event-selectors-rw-type WriteOnly \
-      --up
-
-  Check CloudTrail status:
-    $(basename "$0") --status
-
-  Remove CloudTrail environment:
-    $(basename "$0") --down
-
-EOF
 }
 
 main() {
@@ -442,18 +357,43 @@ main() {
   msg INFO "AWS Account..${AWS_ACCOUNT_ID}"
   msg =====================================================
 
+  ARGS=()
+
+  if [[ "$VERBOSE" == true ]]; then
+    ARGS+=(--verbose)
+  fi
+
   case "${ACTION:-}" in
   --up)
-    msg INFO "Creating Trail..."
+    run_script \
+      "$S3_BUCKET_MANAGEMENT_SCRIPT" \
+      "$ACTION" \
+      --aws-account-id "$AWS_ACCOUNT_ID" \
+      --aws-region "$AWS_REGION" \
+      --bucket-name "$TRAIL_BUCKET_NAME" \
+      --bucket-encryption-sse-algorithm "$TRAIL_BUCKET_ENCRYPTION_SSE_ALGORITHM" \
+      "${ARGS[@]}"
+
     create_trail
     ;;
 
   --down)
-    msg INFO "Deleting Trail..."
+    run_script \
+      "$S3_BUCKET_MANAGEMENT_SCRIPT" \
+      "$ACTION" \
+      --bucket-name "$TRAIL_BUCKET_NAME" \
+      "${ARGS[@]}"
+
     delete_trail
     ;;
 
   --status)
+    run_script \
+      "$S3_BUCKET_MANAGEMENT_SCRIPT" \
+      "$ACTION" \
+      --bucket-name "$TRAIL_BUCKET_NAME" \
+      "${ARGS[@]}"
+
     trail_status
     ;;
 

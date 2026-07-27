@@ -8,7 +8,7 @@
         "Service": "cloudtrail.amazonaws.com"
       },
       "Action": "s3:GetBucketAcl",
-      "Resource": "arn:aws:s3:::{{TRAIL_BUCKET_NAME}}"
+      "Resource": "arn:aws:s3:::{{BUCKET_NAME}}"
     },
     {
       "Sid": "AWSCloudTrailWrite",
@@ -17,7 +17,7 @@
         "Service": "cloudtrail.amazonaws.com"
       },
       "Action": "s3:PutObject",
-      "Resource": "arn:aws:s3:::{{TRAIL_BUCKET_NAME}}/AWSLogs/{{AWS_ACCOUNT_ID}}/*",
+      "Resource": "arn:aws:s3:::{{BUCKET_NAME}}/AWSLogs/{{AWS_ACCOUNT_ID}}/*",
       "Condition": {
         "StringEquals": {
           "s3:x-amz-acl": "bucket-owner-full-control"

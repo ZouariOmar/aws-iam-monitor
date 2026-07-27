@@ -2,7 +2,7 @@
   "Rules": [
     {
       "ApplyServerSideEncryptionByDefault": {
-        "SSEAlgorithm": "{{TRAIL_BUCKET_ENCRYPTION_SSE_ALGORITHM}}"
+        "SSEAlgorithm": "{{BUCKET_ENCRYPTION_SSE_ALGORITHM}}"
       }
     }
   ]
