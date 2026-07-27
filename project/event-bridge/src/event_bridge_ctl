@@ -1,0 +1,349 @@
+#!/usr/bin/env bash
+# =========================================
+# .FILE
+#   event_bridge_ctl
+#
+# .SYNOPSIS
+#   Amazon EventBridge management
+#   automation script.
+#
+# .DESCRIPTION
+#   Creates, configures, monitors,
+#   and removes an Amazon EventBridge
+#   rule used for IAM monitoring.
+#
+#   The rule listens for AWS CloudTrail
+#   IAM API events and serves as the
+#   entry point for the monitoring
+#   pipeline.
+#
+# .USAGE
+#   ./event_bridge_ctl [OPTIONS] ACTION
+#
+# .ACTIONS
+#   --up
+#       Create the EventBridge rule.
+#
+#   --down
+#       Delete the EventBridge rule.
+#
+#   --status
+#       Display rule status.
+#
+# .REQUIREMENTS
+#   - AWS CLI v2
+#   - EventBridge permissions
+# =========================================
+set -Eeuo pipefail
+
+#####################
+### Configuration ###
+#####################
+
+# Directories
+LIB_DIR="${LIB_DIR:-lib}"
+EVENT_BRIDGE_DIR="${EVENT_BRIDGE_DIR:-event-bridge}"
+EVENT_BRIDGE_POLICIES_DIR="${EVENT_BRIDGE_POLICIES_DIR:-${EVENT_BRIDGE_DIR}/policies}"
+EVENT_BRIDGE_TEST_DIR="${EVENT_BRIDGE_TEST_DIR:-${EVENT_BRIDGE_DIR}/test}"
+
+# Files
+EVENT_PATTERN_FILE="${EVENT_PATTERN_FILE:-${EVENT_BRIDGE_POLICIES_DIR}/iam-event-pattern.json}"
+
+# AWS vars
+AWS_ACCOUNT_ID=${AWS_ACCOUNT_ID:-}
+AWS_REGION=${AWS_REGION:-}
+
+# Global vars
+VERBOSE=${VERBOSE:-false}
+
+# EventBridge vars
+RULE_NAME=${RULE_NAME:-"aws-iam-monitor-rule"}
+
+######################
+### !Configuration ###
+######################
+
+usage() {
+  cat <<EOF
+$(msg "USAGE:")
+  $(basename "$0") [OPTIONS] ACTION
+
+$(msg "ACTIONS:")
+  --up
+      Create and configure the
+      EventBridge rule.
+
+  --down
+      Delete the EventBridge rule.
+
+  --status
+      Display EventBridge rule
+      status.
+
+$(msg "OPTIONS:")
+  --aws-region <region>
+      AWS region where the rule
+      resides.
+
+  --rule-name <name>
+      EventBridge rule name.
+
+      Default:
+        iam-cloudtrail-events
+
+  --event-pattern-file <file>
+      JSON file containing the
+      EventBridge event pattern.
+
+      Default:
+        event-bridge/policies/
+        iam-event-pattern.json
+
+  -v, --verbose
+      Enable verbose output.
+
+  -h, --help
+      Display this help message.
+
+$(msg "EXAMPLES:")
+  Create the EventBridge rule:
+    $(basename "$0") \\
+      --aws-region us-east-1 \\
+      --up
+
+  Create a rule using a custom
+  event pattern:
+    $(basename "$0") \\
+      --aws-region us-east-1 \\
+      --event-pattern-file policies/custom-pattern.json \\
+      --up
+
+  Display rule status:
+    $(basename "$0") \\
+      --aws-region us-east-1 \\
+      --status
+
+  Delete the EventBridge rule:
+    $(basename "$0") \\
+      --aws-region us-east-1 \\
+      --down
+EOF
+}
+
+create_rule() {
+  msg INFO "Creating EventBridge rule..."
+
+  if aws events describe-rule \
+    --name "$RULE_NAME" >/dev/null 2>&1; then
+
+    local CURRENT_EVENT_PATTERN_HASH
+    CURRENT_EVENT_PATTERN_HASH=$(
+      aws events describe-rule \
+        --name "$RULE_NAME" \
+        --query 'EventPattern' \
+        --output text |
+        jq -S . |
+        sha256sum |
+        cut -d' ' -f1
+    )
+
+    local NEW_EVENT_PATTERN_HASH
+    NEW_EVENT_PATTERN_HASH=$(
+      jq -S . "$EVENT_PATTERN_FILE" |
+        sha256sum |
+        cut -d' ' -f1
+    )
+
+    if [[ "$CURRENT_EVENT_PATTERN_HASH" == "$NEW_EVENT_PATTERN_HASH" ]]; then
+      msg INFO "Rule '$RULE_NAME' is already up to date."
+      return
+    fi
+
+    msg INFO "Updating EventBridge rule..."
+
+  else
+    msg INFO "Rule does not exist. Creating it..."
+  fi
+
+  aws events put-rule \
+    --name "$RULE_NAME" \
+    --event-pattern "file://${EVENT_PATTERN_FILE}" \
+    --state ENABLED >/dev/null
+
+  msg SUCCESS "Rule configured successfully."
+}
+
+delete_rule() {
+  msg INFO "Deleting EventBridge rule..."
+
+  if ! aws events describe-rule \
+    --name "$RULE_NAME" >/dev/null 2>&1; then
+    msg INFO "Rule already deleted"
+    return
+  fi
+
+  aws events delete-rule \
+    --name "$RULE_NAME"
+
+  msg SUCCESS "Rule deleted"
+}
+
+rule_status() {
+  msg INFO "Checking rule..."
+
+  if ! aws events describe-rule \
+    --name "$RULE_NAME" >/dev/null 2>&1; then
+    msg ERROR "EventBridge rule '$RULE_NAME' does not exist."
+    return
+  fi
+
+  msg SUCCESS "Rule exists"
+
+  msg INFO "Rule Status:"
+  aws events describe-rule \
+    --name "$RULE_NAME"
+
+  msg INFO "Rule Target(s):"
+  aws events list-targets-by-rule \
+    --rule aws-iam-monitor-rule
+
+  msg SUCCESS "Rule status check complete"
+}
+
+test_rule() {
+  msg INFO "Running EventBridge tests..."
+
+  if [[ ! -d "$EVENT_BRIDGE_TEST_DIR" ]]; then
+    msg ERROR "Test directory not found: ${EVENT_BRIDGE_TEST_DIR}"
+    return 1
+  fi
+
+  local TESTS
+  TESTS=$(find "$EVENT_BRIDGE_TEST_DIR" -type f | sort)
+
+  if [[ -z "$TESTS" ]]; then
+    msg WARNING "No tests found in ${EVENT_BRIDGE_TEST_DIR}"
+    return 0
+  fi
+
+  local FAILED=0
+
+  while IFS= read -r TEST_FILE; do
+
+    if [[ ! -x "$TEST_FILE" ]]; then
+      msg WARNING "Skipping non executable test: ${TEST_FILE}"
+      continue
+    fi
+
+    msg INFO "Running test: ${TEST_FILE}"
+
+    if "$TEST_FILE"; then
+      msg SUCCESS "Passed: ${TEST_FILE}"
+
+    else
+      msg ERROR "Failed: ${TEST_FILE}"
+      FAILED=$((FAILED + 1))
+    fi
+
+  done <<<"$TESTS"
+
+  if [[ "$FAILED" -gt 0 ]]; then
+    msg ERROR "${FAILED} EventBridge test(s) failed"
+    return 1
+  fi
+
+  msg SUCCESS "All EventBridge tests passed"
+}
+
+main() {
+  while [[ $# -gt 0 ]]; do
+    case "$1" in
+    --aws-account-id)
+      AWS_ACCOUNT_ID="$2"
+      shift 2
+      ;;
+
+    --aws-region)
+      AWS_REGION="$2"
+      require_variable AWS_REGION
+      shift 2
+      ;;
+
+    -v | --verbose)
+      VERBOSE=true
+      shift
+      ;;
+
+    --up | --down | --status | --test)
+      ACTION="$1"
+      shift
+      ;;
+
+    -h | --help)
+      usage
+      ;;
+
+    *)
+      msg ERROR "Unknown option: $1"
+      usage
+      ;;
+    esac
+  done
+
+  EVENT_BRIDGE_RULE_ARN="arn:aws:events:${AWS_REGION}:${AWS_ACCOUNT_ID}:rule/${RULE_NAME}"
+
+  msg =========================================================================================================
+  msg INFO "EventBridge Console...https://${AWS_REGION}.console.aws.amazon.com/events/home?region=${AWS_REGION}#/rules"
+  msg INFO "Rule Name.............${RULE_NAME}"
+  msg INFO "Rule ARN..............${EVENT_BRIDGE_RULE_ARN}"
+  msg INFO "Event Pattern.........${EVENT_PATTERN_FILE}"
+  msg INFO "Event Bus.............default"
+  msg INFO "Region................${AWS_REGION}"
+  msg INFO "AWS Account...........${AWS_ACCOUNT_ID}"
+  msg =========================================================================================================
+
+  case "${ACTION:-}" in
+  --up)
+    create_rule
+    ;;
+
+  --down)
+    delete_rule
+    ;;
+
+  --status)
+    rule_status
+    ;;
+
+  --test)
+    test_rule
+    ;;
+
+  *)
+    msg ERROR "Missing action"
+    usage
+    ;;
+  esac
+}
+
+# Load scripts
+if [[ -s "${LIB_DIR}/common" ]]; then
+  # shellcheck disable=SC1091
+  . "${LIB_DIR}/common"
+else
+  echo "[ERROR] Missing Script: '${LIB_DIR}/common'"
+  exit 1
+fi
+load_script "${LIB_DIR}/logger"
+
+# Banner
+cat <<EOF
+███████╗██╗   ██╗███████╗███╗   ██╗████████╗    ██████╗ ██████╗ ██╗██████╗  ██████╗ ███████╗    ███╗   ███╗ █████╗ ███╗   ██╗ █████╗  ██████╗ ███████╗██████╗
+██╔════╝██║   ██║██╔════╝████╗  ██║╚══██╔══╝    ██╔══██╗██╔══██╗██║██╔══██╗██╔════╝ ██╔════╝    ████╗ ████║██╔══██╗████╗  ██║██╔══██╗██╔════╝ ██╔════╝██╔══██╗
+█████╗  ██║   ██║█████╗  ██╔██╗ ██║   ██║       ██████╔╝██████╔╝██║██║  ██║██║  ███╗█████╗      ██╔████╔██║███████║██╔██╗ ██║███████║██║  ███╗█████╗  ██████╔╝
+██╔══╝  ╚██╗ ██╔╝██╔══╝  ██║╚██╗██║   ██║       ██╔══██╗██╔══██╗██║██║  ██║██║   ██║██╔══╝      ██║╚██╔╝██║██╔══██║██║╚██╗██║██╔══██║██║   ██║██╔══╝  ██╔══██╗
+███████╗ ╚████╔╝ ███████╗██║ ╚████║   ██║       ██████╔╝██║  ██║██║██████╔╝╚██████╔╝███████╗    ██║ ╚═╝ ██║██║  ██║██║ ╚████║██║  ██║╚██████╔╝███████╗██║  ██║
+╚══════╝  ╚═══╝  ╚══════╝╚═╝  ╚═══╝   ╚═╝       ╚═════╝ ╚═╝  ╚═╝╚═╝╚═════╝  ╚═════╝ ╚══════╝    ╚═╝     ╚═╝╚═╝  ╚═╝╚═╝  ╚═══╝╚═╝  ╚═╝ ╚═════╝ ╚══════╝╚═╝  ╚═╝
+EOF
+
+main "$@"
