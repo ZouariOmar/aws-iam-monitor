@@ -141,16 +141,6 @@ AWS_ACCOUNT_ID=${AWS_ACCOUNT_ID:-}
 ### !CONFIGURATION ###
 ######################
 
-# Load scripts
-if [[ -s "${LIB_DIR}/common" ]]; then
-  # shellcheck disable=SC1091
-  . "${LIB_DIR}/common"
-else
-  echo "[ERROR] Missing Script: '${LIB_DIR}/common'"
-  exit 1
-fi
-load_script "${LIB_DIR}/logger"
-
 usage() {
   cat <<EOF
 $(msg "USAGE:")
@@ -381,5 +371,15 @@ main() {
     ;;
   esac
 }
+
+# Load scripts
+if [[ -s "${LIB_DIR}/common" ]]; then
+  # shellcheck disable=SC1091
+  . "${LIB_DIR}/common"
+else
+  echo "[ERROR] Missing Script: '${LIB_DIR}/common'"
+  exit 1
+fi
+load_script "${LIB_DIR}/logger"
 
 main "$@"
