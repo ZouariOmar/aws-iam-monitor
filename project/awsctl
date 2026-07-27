@@ -22,6 +22,11 @@
 #           CloudTrail trail, S3 log bucket,
 #           encryption, and audit configuration
 #
+#       - event_bridge_ctl
+#           EventBridge rules, CloudTrail event
+#           filtering, and event monitoring
+#
+#
 #   Supported lifecycle operations:
 #
 #       --up
@@ -30,22 +35,28 @@
 #       --down
 #           Removes configured resources.
 #
+#       --test
+#           Validates resource operation.
+#
 #       --status
 #           Displays resource status.
+#
 #
 #   Supports:
 #
 #       - Target-specific execution:
 #           iam
 #           cloud-trail
-#
+#           event-bridge
+#       - Full environment deployment:
+#           all
 #       - Optional IAM role management.
-#
 #       - Verbose execution logs.
 #
 #   This script is part of aws-iam-monitor,
 #   a real-time AWS IAM auditing and monitoring
 #   project.
+#
 #
 # .INPUTS
 #   Commands:
@@ -56,8 +67,12 @@
 #   --down
 #       Removes the selected environment.
 #
+#   --test
+#       Validates the selected environment.
+#
 #   --status
 #       Displays the selected environment status.
+#
 #
 #   Targets:
 #
@@ -78,6 +93,23 @@
 #           - Bucket policy
 #           - Event selectors
 #
+#   event-bridge
+#       Executes EventBridge lifecycle management:
+#
+#           - EventBridge rules
+#           - CloudTrail event patterns
+#           - IAM API event filtering
+#           - Rule status validation
+#
+#   all
+#       Executes complete aws-iam-monitor
+#       infrastructure deployment:
+#
+#           - IAM
+#           - CloudTrail
+#           - EventBridge
+#
+#
 #   Options:
 #
 #   -r, --role
@@ -89,19 +121,24 @@
 #   -h, --help
 #       Displays usage information.
 #
+#
 # .OUTPUTS
 #   Executes AWS infrastructure lifecycle
 #   operations through dedicated management
 #   modules.
 #
-#   Outputs execution status and logs to stdout.
+#   Outputs execution status, AWS resource
+#   information, ARNs, and console links
+#   to stdout.
+#
 #
 # .NOTES
 #   Project       : aws-iam-monitor
-#   Version       : 1.0
+#   Version       : 1.1
 #   Author        : @ZouariOmar (zouariomar20@gmail.com)
 #   Created       : 14/07/2026
-#   Change Log    : 1.0 Initial release
+#   Change Log    : 1.1
+#
 #
 # .EXAMPLE
 #
@@ -117,11 +154,23 @@
 #   Check CloudTrail status:
 #       ./awsctl --status cloud-trail
 #
+#   Create EventBridge rule:
+#       ./awsctl --up event-bridge
+#
+#   Check EventBridge rule status:
+#       ./awsctl --status event-bridge
+#
+#   Test EventBridge rule operation:
+#       ./awsctl --test event-bridge
+#
+#   Create complete monitoring environment:
+#       ./awsctl --up all
+#
 #   Create IAM environment with roles:
 #       ./awsctl --up iam --role
 #
 #   Enable verbose output:
-#       ./awsctl --up iam --verbose
+#       ./awsctl --up all --verbose
 #
 #
 # .REQUIREMENTS
@@ -130,10 +179,10 @@
 #   - sed
 #   - Configured AWS credentials
 #
+#
 #   Required AWS permissions depend on target:
 #
 #   iam:
-#
 #       iam:CreateUser
 #       iam:CreateGroup
 #       iam:CreateRole
@@ -145,17 +194,27 @@
 #       iam:Detach*
 #
 #   cloud-trail:
-#
 #       cloudtrail:CreateTrail
 #       cloudtrail:DeleteTrail
 #       cloudtrail:StartLogging
 #       cloudtrail:StopLogging
 #       cloudtrail:PutEventSelectors
-#
+#       cloudtrail:GetTrailStatus
 #       s3:CreateBucket
 #       s3:DeleteBucket
 #       s3:PutBucketPolicy
 #       s3:PutEncryptionConfiguration
+#
+#   event-bridge:
+#       events:PutRule
+#       events:DeleteRule
+#       events:DescribeRule
+#       events:EnableRule
+#       events:DisableRule
+#       events:ListTargetsByRule
+#       events:PutTargets
+#       events:RemoveTargets
+#       cloudwatch:GetMetricStatistics
 #
 # shellcheck disable=SC1090
 # =========================================
@@ -170,10 +229,12 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 LIB_DIR="${LIB_DIR:-${SCRIPT_DIR}/lib}"
 IAM_DIR="${IAM_DIR:-${SCRIPT_DIR}/iam}"
 CLOUD_TRAIL_DIR="${CLOUD_TRAIL_DIR:-${SCRIPT_DIR}/cloud-trail}"
+EVENT_BRIDGE_DIR="${EVENT_BRIDGE_DIR:-${SCRIPT_DIR}/event-bridge}"
 
 # Scripts
-CLOUD_TRAIL_CTL_SCRIPT="${CLOUD_TRAIL_CTL_SCRIPT:-${CLOUD_TRAIL_DIR}/src/cloud_trail_ctl}"
 IAM_CTL_SCRIPT="${IAM_CTL_SCRIPT:-${IAM_DIR}/src/iamctl}"
+CLOUD_TRAIL_CTL_SCRIPT="${CLOUD_TRAIL_CTL_SCRIPT:-${CLOUD_TRAIL_DIR}/src/cloud_trail_ctl}"
+EVENT_BRIDGE_SCRIPT="${EVENT_BRIDGE_SCRIPT:-${EVENT_BRIDGE_DIR}/src/event_bridge_ctl}"
 
 # Global vars
 VERBOSE=${VERBOSE:-false}
@@ -241,34 +302,61 @@ $(msg "COMMANDS:")
   --down
       Remove resources.
 
+  --test
+      Validate resource operation.
+
   --status
       Display resource status.
 
 
 $(msg "TARGETS:")
 
+
   iam
       Manage IAM environment.
 
       Includes:
-        - IAM policies
-        - IAM groups
-        - IAM users
-        - IAM roles (optional)
+          - IAM policies
+          - IAM groups
+          - IAM users
+          - IAM roles (optional)
 
 
   cloud-trail
       Manage CloudTrail environment.
 
       Includes:
-        - CloudTrail trail
-        - S3 audit bucket
-        - Bucket encryption
-        - Bucket policy
-        - Event selectors
+          - CloudTrail trail
+          - S3 audit bucket
+          - Bucket encryption
+          - Bucket policy
+          - Event selectors
+
+
+  event-bridge
+      Manage EventBridge environment.
+
+      Includes:
+          - EventBridge rule
+          - CloudTrail event pattern
+          - IAM event filtering
+          - Rule state
+          - Rule configuration
+          - Rule targets
+          - Event matching metrics
+
+
+  all
+      Manage complete monitoring environment.
+
+      Includes:
+          - IAM environment
+          - CloudTrail environment
+          - EventBridge environment
 
 
 $(msg "OPTIONS:")
+
 
   -r, --role
       Enable IAM role management.
@@ -283,38 +371,43 @@ $(msg "OPTIONS:")
 $(msg "EXAMPLES:")
 
   Create IAM environment:
-
       $(basename "$0") --up iam
 
-
   Remove IAM environment:
-
       $(basename "$0") --down iam
 
-
   Create IAM environment with roles:
-
       $(basename "$0") --up iam --role
 
-
   Create CloudTrail environment:
-
       $(basename "$0") --up cloud-trail
 
-
   Check CloudTrail status:
-
       $(basename "$0") --status cloud-trail
 
-
   Remove CloudTrail environment:
-
       $(basename "$0") --down cloud-trail
 
+  Create EventBridge environment:
+      $(basename "$0") --up event-bridge
+
+  Check EventBridge status:
+      $(basename "$0") --status event-bridge
+
+  Test EventBridge rule:
+      $(basename "$0") --test event-bridge
+
+  Remove EventBridge environment:
+      $(basename "$0") --down event-bridge
+
+  Create complete monitoring environment:
+      $(basename "$0") --up all
+
+  Check complete environment status:
+      $(basename "$0") --status all
 
   Enable verbose output:
-
-      $(basename "$0") --up iam --verbose
+      $(basename "$0") --up all --verbose
 EOF
   exit 1
 }
@@ -325,7 +418,7 @@ main() {
 
   while [[ $# -gt 0 ]]; do
     case "$1" in
-    --up | --down | --status)
+    --up | --down | --status | --test)
       ACTION="$1"
 
       if [[ $# -lt 2 ]]; then
@@ -377,6 +470,13 @@ main() {
 
   case "${TARGET:-}" in
 
+  iam)
+    run_script "$IAM_CTL_SCRIPT" \
+      "$ACTION" \
+      --aws-account-id "$AWS_ACCOUNT_ID" \
+      "${ARGS[@]}"
+    ;;
+
   cloud-trail)
     run_script "$CLOUD_TRAIL_CTL_SCRIPT" \
       "$ACTION" \
@@ -385,10 +485,11 @@ main() {
       "${ARGS[@]}"
     ;;
 
-  iam)
-    run_script "$IAM_CTL_SCRIPT" \
+  event-bridge)
+    run_script "$EVENT_BRIDGE_SCRIPT" \
       "$ACTION" \
       --aws-account-id "$AWS_ACCOUNT_ID" \
+      --aws-region "$AWS_REGION" \
       "${ARGS[@]}"
     ;;
 
@@ -401,6 +502,13 @@ main() {
 
     # CLOUD TRAIL
     run_script "$CLOUD_TRAIL_CTL_SCRIPT" \
+      "$ACTION" \
+      --aws-account-id "$AWS_ACCOUNT_ID" \
+      --aws-region "$AWS_REGION" \
+      "${ARGS[@]}"
+
+    # EVENT BRIDGE
+    run_script "$EVENT_BRIDGE_SCRIPT" \
       "$ACTION" \
       --aws-account-id "$AWS_ACCOUNT_ID" \
       --aws-region "$AWS_REGION" \
