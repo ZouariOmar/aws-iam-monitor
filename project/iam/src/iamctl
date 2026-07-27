@@ -158,6 +158,95 @@ ENABLE_ROLES=${ENABLE_ROLES:-false}
 ### !CONFIGURATION ###
 ######################
 
+usage() {
+  cat <<EOF
+$(msg "USAGE:")
+
+  $(basename "$0") ACTION [OPTIONS]
+
+
+$(msg "ACTIONS:")
+
+  --up
+      Create IAM environment.
+
+      Creates:
+        - IAM policies
+        - IAM groups
+        - IAM users
+        - IAM roles (optional)
+
+
+  --down
+      Remove IAM environment.
+
+      Removes:
+        - IAM users
+        - IAM roles (optional)
+        - IAM groups
+        - IAM policies
+
+
+$(msg "OPTIONS:")
+
+  --aws-account-id <id>
+      AWS account identifier.
+
+  --role
+      Enable IAM role management.
+
+  -v, --verbose
+      Enable verbose output.
+
+  -h, --help
+      Show this help message.
+
+
+$(msg "RESOURCE FILES:")
+
+  users.csv
+      User definitions.
+
+      Format:
+        USER,GROUP
+
+  groups.csv
+      Group and policy mappings.
+
+      Format:
+        GROUP,POLICY
+
+  roles.csv
+      Role definitions.
+
+      Format:
+        ROLE,POLICY
+
+
+$(msg "EXAMPLES:")
+
+  Create IAM environment:
+
+      $(basename "$0") --up
+
+
+  Remove IAM environment:
+
+      $(basename "$0") --down
+
+
+  Create IAM environment with roles:
+
+      $(basename "$0") --up --role
+
+
+  Run with verbose logs:
+
+      $(basename "$0") --up --verbose
+EOF
+  exit 1
+}
+
 iam_setup() {
   local ACTION=$1
 
@@ -292,95 +381,6 @@ iam_status() {
   fi
 
   msg SUCCESS "IAM status check complete"
-}
-
-usage() {
-  cat <<EOF
-$(msg "USAGE:")
-
-  $(basename "$0") ACTION [OPTIONS]
-
-
-$(msg "ACTIONS:")
-
-  --up
-      Create IAM environment.
-
-      Creates:
-        - IAM policies
-        - IAM groups
-        - IAM users
-        - IAM roles (optional)
-
-
-  --down
-      Remove IAM environment.
-
-      Removes:
-        - IAM users
-        - IAM roles (optional)
-        - IAM groups
-        - IAM policies
-
-
-$(msg "OPTIONS:")
-
-  --aws-account-id <id>
-      AWS account identifier.
-
-  --role
-      Enable IAM role management.
-
-  -v, --verbose
-      Enable verbose output.
-
-  -h, --help
-      Show this help message.
-
-
-$(msg "RESOURCE FILES:")
-
-  users.csv
-      User definitions.
-
-      Format:
-        USER,GROUP
-
-  groups.csv
-      Group and policy mappings.
-
-      Format:
-        GROUP,POLICY
-
-  roles.csv
-      Role definitions.
-
-      Format:
-        ROLE,POLICY
-
-
-$(msg "EXAMPLES:")
-
-  Create IAM environment:
-
-      $(basename "$0") --up
-
-
-  Remove IAM environment:
-
-      $(basename "$0") --down
-
-
-  Create IAM environment with roles:
-
-      $(basename "$0") --up --role
-
-
-  Run with verbose logs:
-
-      $(basename "$0") --up --verbose
-EOF
-  exit 1
 }
 
 main() {
