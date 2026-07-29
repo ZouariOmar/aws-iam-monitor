@@ -39,12 +39,10 @@ cleanup() {
   msg "[INFO] Cleaning up IAM test user..."
 
   if aws iam get-user \
-    --user-name "$TEST_USER" \
-    >/dev/null 2>&1; then
+    --user-name "$TEST_USER" >/dev/null 2>&1; then
 
     aws iam delete-user \
-      --user-name "$TEST_USER" \
-      >/dev/null
+      --user-name "$TEST_USER" >/dev/null
 
     msg "[SUCCESS] Deleted IAM user: ${TEST_USER}"
 
@@ -53,7 +51,6 @@ cleanup() {
   fi
 }
 
-# shellcheck disable=SC2329
 countdown() {
   local SECONDS_LEFT="$1"
 
