@@ -5,6 +5,6 @@
 ### CUSTOM IGNORES ###
 *.venv/
 */.env*
-*/build/
+build/
 *.egg-info/
 *.lock
