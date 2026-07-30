@@ -1,0 +1,27 @@
+{
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Sid": "CloudWatchLogs",
+      "Effect": "Allow",
+      "Action": [
+        "logs:CreateLogGroup",
+        "logs:CreateLogStream",
+        "logs:PutLogEvents"
+      ],
+      "Resource": "*"
+    },
+    {
+      "Sid": "S3AuditHistory",
+      "Effect": "Allow",
+      "Action": ["s3:PutObject"],
+      "Resource": ["arn:aws:s3:::iam-history/*"]
+    },
+    {
+      "Sid": "PublishAlerts",
+      "Effect": "Allow",
+      "Action": ["sns:Publish"],
+      "Resource": ["arn:aws:sns:*:*:*"]
+    }
+  ]
+}
