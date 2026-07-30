@@ -115,3 +115,23 @@ require_variable() {
     exit 1
   fi
 }
+
+load_env() {
+  if [[ $# -eq 0 ]]; then
+    msg ERROR "No environment file(s) specified"
+    exit 1
+  fi
+
+  for ENV_FILE in "$@"; do
+    if [[ ! -f "$ENV_FILE" ]]; then
+      msg WARNING "Environment file not found: ${ENV_FILE}"
+      continue
+    fi
+
+    msg INFO "Loading environment file: ${ENV_FILE}"
+
+    set -a
+    source "$ENV_FILE"
+    set +a
+  done
+}
