@@ -2,9 +2,10 @@
   "Version": "2012-10-17",
   "Statement": [
     {
+      "Sid": "LambdaAssumeRole",
       "Effect": "Allow",
       "Principal": {
-        "AWS": "arn:aws:iam::{{AWS_ACCOUNT_ID}}:root"
+        "Service": "lambda.amazonaws.com"
       },
       "Action": "sts:AssumeRole"
     }

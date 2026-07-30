@@ -301,7 +301,7 @@ iam_setup() {
 
   # Roles
   if [[ "$ENABLE_ROLES" == true ]]; then
-    while IFS=', ' read -r ROLE POLICY; do
+    while IFS=', ' read -r ROLE POLICY TRUST_POLICY; do
       if [[ "$VERBOSE" == true ]]; then
         msg INFO "ROLE: $ROLE | POLICY: $POLICY"
       fi
@@ -314,7 +314,10 @@ iam_setup() {
       fi
 
       if [[ "$ACTION" == "--up" ]]; then
-        ARGS+=(--policy "$POLICY")
+        ARGS+=(
+          --policy "$POLICY"
+          --trust-policy "${POLICIES_DIR}/${TRUST_POLICY}"
+        )
       fi
 
       # Create/Delete Role

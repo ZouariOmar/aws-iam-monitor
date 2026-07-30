@@ -131,7 +131,7 @@ IAM_DIR="${IAM_DIR:-iam}"
 POLICIES_DIR="${POLICIES_DIR:-${IAM_DIR}/policies}"
 
 # Files
-TRUST_POLICY_FILE="${POLICIES_DIR}/trust-policy.json"
+TRUST_POLICY_FILE="${TRUST_POLICY_FILE:-}"
 
 # Global vars
 VERBOSE=${VERBOSE:-false}
@@ -333,6 +333,11 @@ main() {
     --role)
       ROLE="$2"
       require_variable ROLE
+      shift 2
+      ;;
+
+    --trust-policy)
+      TRUST_POLICY_FILE="$2"
       shift 2
       ;;
 

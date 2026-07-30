@@ -1,4 +1,5 @@
-role, policy
-ProdRole, ProdPolicy
-DevRole, DevPolicy
-TestRole, AuditPolicy
+role, policy, trust_policy
+ProdRole, ProdPolicy, iam-trust-policy.json
+DevRole, DevPolicy, iam-trust-policy.json
+TestRole, AuditPolicy, iam-trust-policy.json
+AwsIamMonitorLambdaRole, lambdaExecutionPolicy, lambda-trust-policy.json
