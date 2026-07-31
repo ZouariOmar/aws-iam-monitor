@@ -128,10 +128,25 @@ load_env() {
       continue
     fi
 
-    msg INFO "Loading environment file: ${ENV_FILE}"
+    if [[ "$VERBOSE" == true ]]; then
+      msg INFO "Loading environment file: ${ENV_FILE}"
+    fi
 
     set -a
     source "$ENV_FILE"
     set +a
   done
+}
+
+build_arn() {
+  local ARN_PREFIX="$1"
+  local RESOURCE="$2"
+  local REGION="${3:-}"
+  local ACCOUNT="${4:-$AWS_ACCOUNT_ID}"
+
+  printf 'arn:%s:%s:%s:%s\n' \
+    "$ARN_PREFIX" \
+    "$REGION" \
+    "$ACCOUNT" \
+    "$RESOURCE"
 }
