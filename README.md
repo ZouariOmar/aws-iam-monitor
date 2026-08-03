@@ -1,202 +1,295 @@
-[![Contributors](https://img.shields.io/badge/CONTRIBUTORS-01-blue?style=plastic)](https://github/ZouariOmar/aws-iam-monitor/graphs/contributors)
-[![Forks](https://img.shields.io/badge/FORKS-00-blue?style=plastic)](https://github/ZouariOmar/aws-iam-monitor/network/members)
-[![Stargazers](https://img.shields.io/badge/STARS-00-blue?style=plastic)](https://github.com/github/ZouariOmar/aws-iam-monitor/stargazers)
-[![Issues](https://img.shields.io/badge/ISSUES-00-blue?style=plastic)](https://github/ZouariOmar/aws-iam-monitor/issues)
-[![Apache-2.0 License](https://img.shields.io/badge/LICENSE-GPL3.0-blue?style=plastic)](https://raw.githubusercontent.com/ZouariOmar/aws-iam-monitor/refs/heads/main/LICENSE)
-[![Linkedin](https://img.shields.io/badge/Linkedin-7.2k-blue?style=plastic)](https://www.linkedin.com/in/zouari-omar)
-
 <div align="center">
 
-<img src="res/img/aws-iam-monitor-logo.png" width="300">
+<img src="res/img/aws-iam-monitor-logo.png" width="300" alt="aws-iam-monitor logo">
 
 <h1>aws-iam-monitor</h1>
 
-<h6>Monitor, Audit, Protect, Real-time visibility into AWS IAM changes and access control activity</h6>
+<p><strong>Enterprise-grade, real-time AWS IAM auditing, security monitoring, and automated threat detection platform.</strong></p>
 
-![Project](https://img.shields.io/badge/project-generic-blue?style=for-the-badge&logo=github&logoColor=white)
-![Open Source](https://img.shields.io/badge/open_source-yes-brightgreen?style=for-the-badge&logo=opensourceinitiative&logoColor=white)
-![Status](https://img.shields.io/badge/status-active-success?style=for-the-badge&logo=statuspage&logoColor=white)
-![Maintained](https://img.shields.io/badge/maintained-yes-blue?style=for-the-badge&logo=dependabot&logoColor=white)
-![Version](https://img.shields.io/badge/version-0.1.0-orange?style=for-the-badge&logo=semver&logoColor=white)
-![License](https://img.shields.io/badge/license-Apache2.0-green?style=for-the-badge&logo=open-source-initiative&logoColor=white)
-![Automation](https://img.shields.io/badge/category-automation-purple?style=for-the-badge&logo=githubactions&logoColor=white)
-![Bash Script](https://img.shields.io/badge/bash_script-%23121011.svg?style=for-the-badge&logo=gnu-bash&logoColor=white)
-![Docker](https://img.shields.io/badge/docker-2496ED?style=for-the-badge&logo=docker&logoColor=white)
-![Linux](https://img.shields.io/badge/linux-FCC624?style=for-the-badge&logo=linux&logoColor=black)
-![DevOps](https://img.shields.io/badge/devops-automation-purple?style=for-the-badge&logo=devops&logoColor=white)
-![Cross Platform](https://img.shields.io/badge/cross--platform-supported-success?style=for-the-badge&logo=windows-terminal&logoColor=white)
-![Fast](https://img.shields.io/badge/performance-fast-brightgreen?style=for-the-badge&logo=speedtest&logoColor=white)
-![Stable](https://img.shields.io/badge/build-stable-success?style=for-the-badge&logo=checkmarx&logoColor=white)
-![Community](https://img.shields.io/badge/community-driven-blueviolet?style=for-the-badge&logo=githubsponsors&logoColor=white)
+[![Contributors](https://img.shields.io/badge/CONTRIBUTORS-01-blue?style=for-the-badge)](https://github.com/ZouariOmar/aws-iam-monitor/graphs/contributors)
+[![Open Source](https://img.shields.io/badge/open_source-yes-brightgreen?style=for-the-badge&logo=opensourceinitiative&logoColor=white)](https://github.com/ZouariOmar/aws-iam-monitor)
+[![Status](https://img.shields.io/badge/status-active-success?style=for-the-badge&logo=statuspage&logoColor=white)](https://github.com/ZouariOmar/aws-iam-monitor)
+[![Version](https://img.shields.io/badge/version-2.0.0-orange?style=for-the-badge&logo=semver&logoColor=white)](https://github.com/ZouariOmar/aws-iam-monitor/releases)
+[![License](https://img.shields.io/badge/license-Apache2.0-green?style=for-the-badge&logo=open-source-initiative&logoColor=white)](LICENSE)
+[![Bash](https://img.shields.io/badge/bash_script-%23121011.svg?style=for-the-badge&logo=gnu-bash&logoColor=white)](https://www.gnu.org/software/bash/)
+[![Python](https://img.shields.io/badge/python-3.11+-blue?style=for-the-badge&logo=python&logoColor=white)](https://www.python.org/)
+[![AWS](https://img.shields.io/badge/AWS-232F3E?style=for-the-badge&logo=amazon-aws&logoColor=white)](https://aws.amazon.com/)
 
 </div>
 
-- [Overview](#overview)
-- [Project Flow](#project-flow)
-- [Key Features](#key-features)
-  - [Real-time Detection](#real-time-detection)
-  - [Existing System Audit](#existing-system-audit)
-  - [Permission Tracking](#permission-tracking)
-  - [IP Whitelists and Conditions](#ip-whitelists-and-conditions)
-  - [Centralized Alerts](#centralized-alerts)
-  - [Reports and History](#reports-and-history)
-- [Usage](#usage)
-- [Download](#download)
-- [Emailware](#emailware)
-- [Contributing](#contributing)
-- [License](#license)
-- [Contact](#contact)
-
-<div align="center">
-
-<img src="res/img/aws-iam-monitor-full-logo.png">
-
-</div>
+---
 
 ## Overview
 
-aws-iam-monitor is a real-time AWS IAM auditing and monitoring platform designed
-to provide continuous visibility into identity and access management activities
-across AWS environments.
+**aws-iam-monitor** is a production-ready, serverless AWS security solution designed to provide continuous, real-time visibility into Identity and Access Management (IAM) changes across AWS accounts and AWS Organizations.
 
-The system monitors IAM changes, analyzes **AWS CloudTrail** events, and detects
-security-sensitive modifications such as new user creation, permission
-changes, role updates, and access policy modifications. By centralizing IAM
-activity monitoring, organizations can quickly identify unauthorized changes,
-improve security posture, and maintain compliance with cloud governance requirements.
+By capturing management events from **AWS CloudTrail**, filtering events with **Amazon EventBridge**, and processing security payloads with **AWS Lambda**, the system detects unauthorized modifications, privilege escalation risks, new credential creation, and policy tampering within seconds. High-risk events immediately trigger **Amazon SNS** notifications (with optional automated email subscriptions) while maintaining structured audit logs in **Amazon S3** and custom performance metrics in **Amazon CloudWatch**.
 
-aws-iam-monitor helps security teams understand **who changed what, when, and
-from where**, while maintaining a complete historical record of IAM activity
-for investigation and auditing purposes.
+```
+IAM Action ──► CloudTrail ──► EventBridge ──► Lambda ──► SNS Alerts (Email)
+                                                      ├─► S3 Audit Logs
+                                                      └─► CloudWatch Metrics
+```
 
-> [!NOTE]
-> The architecture is designed to support **AWS Organizations**.
+---
 
-> [!IMPORTANT]
-> In a production deployment, the monitoring Lambda would assume a **read-only IAM**
-> role in each member account using AWS STS AssumeRole, enabling centralized IAM
-> auditing across the organization.
+## Key Features
 
-## Project Flow
+- **Real-time Event Detection**: Instant detection of sensitive IAM operations (e.g. `CreateUser`, `DeletePolicy`, `CreateAccessKey`, `DeactivateMFADevice`, `AttachUserPolicy`).
+- **Risk Classification**: Automated risk grading (`CRITICAL`, `HIGH`, `MEDIUM`, `LOW`) for every IAM API call.
+- **Dedicated SNS Management Component**: Dedicated `sns` module with automated email alert subscriptions via `.env` or CLI parameters.
+- **Audit Trail Archiving**: Every IAM event is saved as a structured JSON record in Amazon S3 grouped by date (`YYYY/MM/DD/`).
+- **CloudWatch Metrics**: Emits custom `AWSIAMMonitor` metrics for CloudWatch dashboards and alarm creation.
+- **Idempotent Infrastructure**: CLI tooling (`awsctl`) creates, updates, and deletes resources safely without duplicate creation.
+- **Zero External Dependencies**: Operates purely using standard Bash, Python 3, and official AWS CLI v2 without runtime third-party dependencies.
+
+---
+
+## Architecture Flow
 
 ```mermaid
 flowchart TD
-    A["IAM Activity<br/>(User • Role • Policy Changes)"]
+    subgraph IAM_Events["IAM Activity Sources"]
+        A1["IAM Users / Admins"]
+        A2["Automated CI/CD Pipelines"]
+        A3["Attacker / Compromised Key"]
+    end
 
-    subgraph AWS["AWS Account"]
-        B["AWS CloudTrail<br/>Capture IAM API Events"]
-        C["Amazon EventBridge<br/>Event Filtering & Routing"]
-        D["AWS Lambda (Python)<br/>Event Processing & Analysis"]
+    subgraph AWS_Account["AWS Account / Organization"]
+        B["AWS CloudTrail<br/><i>(Management Event Capture)</i>"]
+        C["Amazon EventBridge<br/><i>(IAM API Event Rule Filter)</i>"]
 
-        subgraph Processing["Monitoring & Response"]
-            E["Amazon SNS<br/>Security Alerts"]
-            F["Amazon S3<br/>Audit Reports & History"]
-            G["Amazon CloudWatch<br/>Logs & Metrics"]
+        subgraph Serverless_Processing["Processing Layer"]
+            D["AWS Lambda (Python 3.11)<br/><i>(Event Parser & Risk Analyzer)</i>"]
+        end
+
+        subgraph Output_Layer["Response & Storage Layer"]
+            E["Amazon SNS<br/><i>(Security Alert Topic & Email)</i>"]
+            F["Amazon S3 Audit Bucket<br/><i>(JSON Audit Log Archival)</i>"]
+            G["Amazon CloudWatch<br/><i>(Logs, Metrics & Alarms)</i>"]
         end
     end
 
-    A --> B
-    B --> C
-    C --> D
+    A1 --> B
+    A2 --> B
+    A3 --> B
 
-    D --> E
-    D --> F
-    D --> G
+    B -->|Log Events| C
+    C -->|Trigger| D
 
-    G -. Monitoring .-> D
-```
-
-```mermaid
-flowchart TD
-    A["IAM Change"]
-    B["AWS CloudTrail"]
-    C["Amazon EventBridge"]
-    D["AWS Lambda (Python)"]
-
-    E["Amazon SNS<br/>Alerts"]
-    F["Amazon S3<br/>Audit Reports"]
-    G["Amazon CloudWatch<br/>Logs & Metrics"]
-
-    A --> B
-    B --> C
-    C --> D
-
-    D --> E
-    D --> F
-    D --> G
+    D -->|Publish High Risk| E
+    D -->|Store JSON| F
+    D -->|Put Metrics & Logs| G
 
     classDef aws fill:#FF9900,color:#fff,stroke:#232F3E,stroke-width:2px;
     classDef service fill:#232F3E,color:#fff,stroke:#FF9900,stroke-width:2px;
-
     class B,C,D aws;
     class E,F,G service;
 ```
 
-## Key Features
+---
 
-### Real-time Detection
+## AWS Services Used
 
-Automatically detect IAM changes as they occur, including the creation of
-new IAM users, roles, access keys, and other identity-related resources.
+| AWS Service            | Purpose                                                                             |
+| :--------------------- | :---------------------------------------------------------------------------------- |
+| **AWS IAM**            | Customer-managed policies, groups, users, execution roles, and trust policies.      |
+| **AWS CloudTrail**     | Captures AWS account management events and API calls.                               |
+| **Amazon SNS**         | Topic, topic policy, and email subscription management for security alerts.         |
+| **AWS Lambda**         | Python-based event evaluation, risk scoring, S3 logging, SNS alert dispatching.     |
+| **Amazon EventBridge** | Filters IAM API call patterns from CloudTrail and targets Lambda.                   |
+| **Amazon S3**          | Server-side encrypted storage for CloudTrail logs and historical IAM audit records. |
+| **Amazon CloudWatch**  | Log Group retention management, metric emission, and alarm monitoring.              |
 
-### Existing System Audit
+---
 
-Perform comprehensive IAM inventory scans across AWS accounts to identify
-existing users, roles, policies, and permissions.
+## Repository Structure
 
-### Permission Tracking
-
-Monitor and analyze changes to IAM roles, policies, and permission boundaries to
-detect privilege escalation risks and unauthorized access modifications.
-
-### IP Whitelists and Conditions
-
-Track changes to IAM policy conditions, source IP restrictions, and
-network-based access controls to identify unexpected changes in access rules.
-
-### Centralized Alerts
-
-Aggregate IAM security events at the AWS Organization level and deliver
-centralized alerts for faster detection and response.
-
-### Reports and History
-
-Generate detailed audit reports and maintain historical IAM activity records for
-compliance reviews, security investigations, and forensic analysis.
-
-## Usage
-
-```bash
-git clone https://github/ZouariOmar/aws-iam-monitor
-cd aws-iam-monitor
-
-make
+```
+aws-iam-monitor/
+├── Makefile                        # Project build, lint, and test tasks
+├── README.md                       # Comprehensive documentation
+├── project/
+│   ├── .env                        # Environment configuration (SNS_ALERT_EMAIL, etc.)
+│   ├── .env.example                # Configuration template
+│   ├── awsctl                      # Primary orchestration CLI binary
+│   ├── lib/
+│   │   ├── common                  # Shared helper library (ARN build, state polling, env loader)
+│   │   ├── logger                  # Colorized logging module (INFO, SUCCESS, ERROR, etc.)
+│   │   └── requirements            # CLI prerequisite checker
+│   ├── iam/
+│   │   ├── policies/               # IAM policy JSON definitions
+│   │   ├── res/                    # IAM CSV definitions (users, groups, roles)
+│   │   └── src/
+│   │       ├── iamctl              # IAM environment orchestrator
+│   │       ├── policy_ctl          # Customer policy management script
+│   │       ├── group_ctl           # IAM group management script
+│   │       ├── role_ctl            # IAM role management script
+│   │       └── user_ctl            # IAM user management script
+│   ├── cloud-trail/
+│   │   ├── policies/               # CloudTrail & bucket policy templates
+│   │   └── src/
+│   │       ├── cloud_trail_ctl     # CloudTrail trail management script
+│   │       └── s3_bucket_ctl       # S3 bucket lifecycle & encryption script
+│   ├── sns/
+│   │   ├── policies/               # SNS topic policy templates
+│   │   ├── test/                   # SNS test scripts
+│   │   └── src/
+│   │       └── sns_ctl             # SNS alert topic & subscription management script
+│   ├── event-bridge/
+│   │   ├── policies/               # Event pattern JSON definition
+│   │   ├── test/                   # Automated test scripts
+│   │   └── src/
+│   │       └── event_bridge_ctl    # EventBridge rule & target wiring script
+│   └── lambda/
+│       ├── build/                  # Generated zip output directory
+│       ├── policies/               # Lambda execution policy & trust policy
+│       ├── test/                   # Lambda automated test scripts
+│       └── src/
+│           ├── lambda_ctl          # Lambda deployment & packaging script
+│           └── lambda_function.py  # Python monitoring handler
+└── res/                            # Documentation assets & logos
 ```
 
-> See [INSTALL.md](/INSTALL.md) for more informations
+---
 
-## Download
+## Prerequisites & Installation
 
-You can [download](https://github.com/ZouariOmar/aws-iam-monitor/releases) the latest installable version of aws-iam-monitor for Windows, macOS and Linux.
+### Requirements
 
-## Emailware
+- **Operating System**: Linux / macOS
+- **Shell**: Bash v4.0+
+- **Tools**:
+  - `aws-cli` (v2.0+)
+  - `jq` (v1.6+)
+  - `sed`
+  - `zip`
+  - `openssl`
+  - `python3` (v3.11+)
 
-aws-iam-monitor is an emailware. Meaning, if you liked using this app or it has helped you in any way,
-would like you send as an email at <zouariomar20@gmail.com> about anything you'd want to say about
-this software. I'd really appreciate it!
+### Installation & Configuration
 
-## Contributing
+```bash
+# Clone the repository
+git clone https://github.com/ZouariOmar/aws-iam-monitor.git
+cd aws-iam-monitor/project
 
-Contributions are welcome! Please feel free to submit a Pull Request.
+# Configure environment variables (optional: set SNS email alert recipient)
+cp .env.example .env
+nano .env  # Set SNS_ALERT_EMAIL=security-team@example.com
+
+# Ensure CLI executable permissions
+chmod +x awsctl \
+  lib/* \
+  iam/src/* \
+  cloud-trail/src/* \
+  sns/src/* \
+  sns/test/* \
+  event-bridge/src/* \
+  lambda/src/* \
+  event-bridge/test/* \
+  lambda/test/*
+
+# Verify AWS CLI authentication
+aws sts get-caller-identity
+```
+
+---
+
+## CLI Usage (`awsctl`)
+
+The primary orchestration tool is `./awsctl`. It provides a unified command line interface for provisioning, managing, testing, and destroying infrastructure components.
+
+### Command Syntax
+
+```bash
+./awsctl <ACTION> [TARGET] [OPTIONS]
+```
+
+#### Actions
+
+- `--up` : Create/configure resources.
+- `--down` : Tear down/delete resources.
+- `--status` : Check status of resources.
+- `--test` : Execute test suites.
+
+#### Targets
+
+- `all` _(default)_ : Complete monitoring infrastructure.
+- `iam` : IAM policies, groups, users, and roles.
+- `cloud-trail` : CloudTrail trail and log S3 bucket.
+- `sns` : SNS security alert topic and email subscriptions.
+- `lambda` : Lambda function and audit S3 bucket.
+- `event-bridge` : EventBridge rule and target registration.
+
+#### Options
+
+- `-r`, `--role` : Include optional IAM roles during IAM setup.
+- `-v`, `--verbose` : Display detailed AWS CLI execution logs.
+- `-h`, `--help` : Show help message.
+
+---
+
+## Deployment Examples
+
+### 1. Provision Complete Monitoring Environment
+
+```bash
+./awsctl --up all
+```
+
+_This will automatically:_
+
+1. Create customer-managed IAM policies (`DevPolicy`, `ProdPolicy`, `AuditPolicy`), groups (`DevGroup`, `ProdGroup`, `TestGroup`), and users (`DevAdmin`, `ProdAdmin`, etc.).
+2. Provision an S3 log bucket and create a CloudTrail management events trail.
+3. Provision the SNS alert topic (`iam-alerts`) and subscribe `SNS_ALERT_EMAIL` if configured in `.env`.
+4. Provision an S3 audit history bucket and deploy the monitoring Lambda function with its execution role.
+5. Create an EventBridge rule for IAM events, attach the Lambda function as a target, and grant invocation permissions.
+
+### 2. Provision SNS Alert Component Only
+
+```bash
+./awsctl --up sns
+```
+
+### 3. Check System Status
+
+```bash
+./awsctl --status all
+```
+
+### 4. Run Automated Test Suite
+
+```bash
+./awsctl --test all
+```
+
+### 5. Tear Down Infrastructure
+
+```bash
+./awsctl --down all
+```
+
+---
+
+## Security Considerations
+
+- **Least Privilege Access**: All IAM execution policies are scoped strictly to necessary permissions.
+- **Data Protection**: S3 log buckets enforce AES-256 Server-Side Encryption (SSE) and S3 versioning.
+- **Zero Hardcoded Credentials**: No AWS access keys or secrets are stored in code or configuration files. Credentials are read directly from the environment or AWS CLI profile.
+- **Idempotency**: Resources are safely checked before creation or deletion to prevent unintended service disruptions.
+
+---
 
 ## License
 
-This repository is licensed under the **Apache-2.0**. You are free to use, modify, and distribute the content. See the [LICENSE](LICENSE) file for details.
+This project is licensed under the **Apache-2.0 License**. See the [LICENSE](LICENSE) file for details.
 
-## Contact
+---
 
-For questions or suggestions, feel free to reach out:
+## Contact & Support
 
-- **github**: [github](https://github/ZouariOmar/aws-iam-monitor)
+- **Author**: [@ZouariOmar](https://github.com/ZouariOmar)
 - **Email**: <zouariomar20@gmail.com>
 - **LinkedIn**: [zouari-omar](https://www.linkedin.com/in/zouari-omar)
+- **Issues**: [GitHub Issues](https://github.com/ZouariOmar/aws-iam-monitor/issues)
