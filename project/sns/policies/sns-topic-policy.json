@@ -1,0 +1,17 @@
+{
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Sid": "AWSIAMMonitorSNSPublish",
+      "Effect": "Allow",
+      "Principal": {
+        "Service": [
+          "lambda.amazonaws.com",
+          "cloudwatch.amazonaws.com"
+        ]
+      },
+      "Action": "sns:Publish",
+      "Resource": "arn:aws:sns:{{AWS_REGION}}:{{AWS_ACCOUNT_ID}}:{{SNS_TOPIC_NAME}}"
+    }
+  ]
+}
