@@ -1,222 +1,83 @@
 #!/usr/bin/env bash
 # =========================================
-# .FILE
+# FILE
 #   awsctl
 #
-# .SYNOPSIS
-#   AWS lifecycle orchestration command.
+# SYNOPSIS
+#   AWS lifecycle orchestration CLI for aws-iam-monitor.
 #
-# .DESCRIPTION
-#   Provides a unified command-line interface
-#   for managing AWS security infrastructure
-#   components used by the aws-iam-monitor
-#   project.
+# DESCRIPTION
+#   Unified command-line interface for provisioning, managing, monitoring,
+#   testing, and tearing down the complete aws-iam-monitor security infrastructure.
 #
-#   The script orchestrates dedicated management
-#   modules:
+#   Orchestrates dedicated management modules:
+#     - iamctl          : IAM users, groups, roles, customer-managed policies
+#     - cloud_trail_ctl : CloudTrail trail, S3 log bucket, encryption & selectors
+#     - sns_ctl         : SNS alert topic, topic policy, email subscriptions
+#     - lambda_ctl      : Monitoring Lambda, audit S3 storage & logs
+#     - event_bridge_ctl: EventBridge rule, CloudTrail filtering & Lambda target
 #
-#       - iamctl
-#           IAM users, groups, roles, policies
+#   Supported lifecycle actions:
+#     --up      Creates and configures infrastructure components.
+#     --down    Tears down configured infrastructure components.
+#     --status  Displays status and configuration of components.
+#     --test    Runs component and end-to-end automated test suites.
 #
-#       - cloud_trail_ctl
-#           CloudTrail trail, S3 log bucket,
-#           encryption, and audit configuration
+#   Supported targets:
+#     iam          Manage IAM policies, groups, users, and optional roles.
+#     cloud-trail  Manage CloudTrail management event logging & S3 log bucket.
+#     sns          Manage SNS alert topic and email subscriptions.
+#     lambda       Manage monitoring Lambda function & audit S3 storage.
+#     event-bridge Manage EventBridge rule, event filtering & Lambda target.
+#     all          Manage complete end-to-end monitoring pipeline.
 #
-#       - event_bridge_ctl
-#           EventBridge rules, CloudTrail event
-#           filtering, and event monitoring
+# USAGE
+#   ./awsctl <--up|--down|--status|--test> [TARGET] [OPTIONS]
 #
+# OPTIONS
+#   --up | --down | --status | --test   Lifecycle action.
+#   TARGET                              Component to operate on:
+#                                       iam, cloud-trail, sns, lambda, event-bridge, all.
+#                                       Default: all
+#   -r, --role                          Enable IAM role management in IAM target.
+#   -v, --verbose                       Enable verbose execution logging.
+#   -h, --help                          Show this help message.
 #
-#   Supported lifecycle operations:
+# EXAMPLES
+#   Create complete monitoring pipeline:
+#     ./awsctl --up all
 #
-#       --up
-#           Creates and configures resources.
+#   Create SNS alert environment:
+#     ./awsctl --up sns
 #
-#       --down
-#           Removes configured resources.
+#   Check status of complete pipeline:
+#     ./awsctl --status all
 #
-#       --test
-#           Validates resource operation.
+#   Run EventBridge tests:
+#     ./awsctl --test event-bridge
 #
-#       --status
-#           Displays resource status.
+#   Tear down complete infrastructure:
+#     ./awsctl --down all
 #
+# DEPENDENCIES
+#   AWS CLI v2, jq, sed, zip, openssl
 #
-#   Supports:
+# REQUIRED AWS PERMISSIONS
+#   Requires administrative access to IAM, CloudTrail, SNS, EventBridge, Lambda,
+#   S3, and CloudWatch Logs in the target AWS account.
 #
-#       - Target-specific execution:
-#           iam
-#           cloud-trail
-#           event-bridge
-#       - Full environment deployment:
-#           all
-#       - Optional IAM role management.
-#       - Verbose execution logs.
+# EXIT CODES
+#   0   Success
+#   1   Error
 #
-#   This script is part of aws-iam-monitor,
-#   a real-time AWS IAM auditing and monitoring
-#   project.
+# NOTES
+#   Project     : aws-iam-monitor
+#   Version     : 2.0
+#   Author      : @ZouariOmar (zouariomar20@gmail.com)
+#   Created     : 14/07/2026
+#   Updated     : 03/08/2026
 #
-#
-# .INPUTS
-#   Commands:
-#
-#   --up
-#       Creates or updates the selected environment.
-#
-#   --down
-#       Removes the selected environment.
-#
-#   --test
-#       Validates the selected environment.
-#
-#   --status
-#       Displays the selected environment status.
-#
-#
-#   Targets:
-#
-#   iam
-#       Executes IAM lifecycle management:
-#
-#           - IAM policies
-#           - IAM groups
-#           - IAM users
-#           - IAM roles (optional)
-#
-#   cloud-trail
-#       Executes CloudTrail lifecycle management:
-#
-#           - CloudTrail trail
-#           - S3 audit bucket
-#           - Bucket encryption
-#           - Bucket policy
-#           - Event selectors
-#
-#   event-bridge
-#       Executes EventBridge lifecycle management:
-#
-#           - EventBridge rules
-#           - CloudTrail event patterns
-#           - IAM API event filtering
-#           - Rule status validation
-#
-#   all
-#       Executes complete aws-iam-monitor
-#       infrastructure deployment:
-#
-#           - IAM
-#           - CloudTrail
-#           - EventBridge
-#
-#
-#   Options:
-#
-#   -r, --role
-#       Enables IAM role management.
-#
-#   -v, --verbose
-#       Enables verbose execution logs.
-#
-#   -h, --help
-#       Displays usage information.
-#
-#
-# .OUTPUTS
-#   Executes AWS infrastructure lifecycle
-#   operations through dedicated management
-#   modules.
-#
-#   Outputs execution status, AWS resource
-#   information, ARNs, and console links
-#   to stdout.
-#
-#
-# .NOTES
-#   Project       : aws-iam-monitor
-#   Version       : 1.1
-#   Author        : @ZouariOmar (zouariomar20@gmail.com)
-#   Created       : 14/07/2026
-#   Change Log    : 1.1
-#
-#
-# .EXAMPLE
-#
-#   Create IAM environment:
-#       ./awsctl --up iam
-#
-#   Remove IAM environment:
-#       ./awsctl --down iam
-#
-#   Create CloudTrail environment:
-#       ./awsctl --up cloud-trail
-#
-#   Check CloudTrail status:
-#       ./awsctl --status cloud-trail
-#
-#   Create EventBridge rule:
-#       ./awsctl --up event-bridge
-#
-#   Check EventBridge rule status:
-#       ./awsctl --status event-bridge
-#
-#   Test EventBridge rule operation:
-#       ./awsctl --test event-bridge
-#
-#   Create complete monitoring environment:
-#       ./awsctl --up all
-#
-#   Create IAM environment with roles:
-#       ./awsctl --up iam --role
-#
-#   Enable verbose output:
-#       ./awsctl --up all --verbose
-#
-#
-# .REQUIREMENTS
-#   - AWS CLI v2
-#   - jq
-#   - sed
-#   - Configured AWS credentials
-#
-#
-#   Required AWS permissions depend on target:
-#
-#   iam:
-#       iam:CreateUser
-#       iam:CreateGroup
-#       iam:CreateRole
-#       iam:CreatePolicy
-#       iam:CreatePolicyVersion
-#       iam:Attach*
-#       iam:AddUserToGroup
-#       iam:Delete*
-#       iam:Detach*
-#
-#   cloud-trail:
-#       cloudtrail:CreateTrail
-#       cloudtrail:DeleteTrail
-#       cloudtrail:StartLogging
-#       cloudtrail:StopLogging
-#       cloudtrail:PutEventSelectors
-#       cloudtrail:GetTrailStatus
-#       s3:CreateBucket
-#       s3:DeleteBucket
-#       s3:PutBucketPolicy
-#       s3:PutEncryptionConfiguration
-#
-#   event-bridge:
-#       events:PutRule
-#       events:DeleteRule
-#       events:DescribeRule
-#       events:EnableRule
-#       events:DisableRule
-#       events:ListTargetsByRule
-#       events:PutTargets
-#       events:RemoveTargets
-#       cloudwatch:GetMetricStatistics
-#
-# shellcheck disable=SC1090
+# shellcheck disable=SC1090,SC1091
 # =========================================
 set -Eeuo pipefail
 
@@ -224,327 +85,292 @@ set -Eeuo pipefail
 ### CONFIGURATION ###
 #####################
 
-# Directories
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 LIB_DIR="${LIB_DIR:-${SCRIPT_DIR}/lib}"
-IAM_DIR="${IAM_DIR:-${SCRIPT_DIR}/iam}"
-CLOUD_TRAIL_DIR="${CLOUD_TRAIL_DIR:-${SCRIPT_DIR}/cloud-trail}"
-EVENT_BRIDGE_DIR="${EVENT_BRIDGE_DIR:-${SCRIPT_DIR}/event-bridge}"
 
-# Scripts
-IAM_CTL_SCRIPT="${IAM_CTL_SCRIPT:-${IAM_DIR}/src/iamctl}"
-CLOUD_TRAIL_CTL_SCRIPT="${CLOUD_TRAIL_CTL_SCRIPT:-${CLOUD_TRAIL_DIR}/src/cloud_trail_ctl}"
-EVENT_BRIDGE_SCRIPT="${EVENT_BRIDGE_SCRIPT:-${EVENT_BRIDGE_DIR}/src/event_bridge_ctl}"
+# Sub-script locations
+IAM_CTL_SCRIPT="${SCRIPT_DIR}/iam/src/iamctl"
+CLOUD_TRAIL_CTL_SCRIPT="${SCRIPT_DIR}/cloud-trail/src/cloud_trail_ctl"
+SNS_CTL_SCRIPT="${SCRIPT_DIR}/sns/src/sns_ctl"
+LAMBDA_CTL_SCRIPT="${SCRIPT_DIR}/lambda/src/lambda_ctl"
+EVENT_BRIDGE_CTL_SCRIPT="${SCRIPT_DIR}/event-bridge/src/event_bridge_ctl"
 
-# Global vars
-VERBOSE=${VERBOSE:-false}
-AWS_ACCOUNT_ID=${AWS_ACCOUNT_ID:-}
-AWS_REGION=${AWS_REGION:-}
-ENABLE_ROLES=${ENABLE_ROLES:-false}
+# Global state
+AWS_ACCOUNT_ID="${AWS_ACCOUNT_ID:-}"
+AWS_REGION="${AWS_REGION:-}"
+ACTION="--up"
+TARGET="all"
+ENABLE_ROLES=false
+VERBOSE="${VERBOSE:-false}"
 
 ######################
 ### !CONFIGURATION ###
 ######################
 
-check_aws_region() {
-  msg INFO "Checking AWS region..."
-
-  AWS_REGION=$(aws configure get region)
-
-  require_variable AWS_REGION
-
-  msg SUCCESS "AWS region configured successfully"
-
-  if [[ "$VERBOSE" == true ]]; then
-    msg SUCCESS "AWS region: ${AWS_REGION}"
-  fi
-}
-
-check_aws_auth() {
-  msg INFO "Checking AWS credentials..."
-
-  if aws sts get-caller-identity >/dev/null 2>&1; then
-
-    AWS_ACCOUNT_ID=$(aws sts get-caller-identity \
-      --query Account \
-      --output text)
-
-    USER=$(aws sts get-caller-identity \
-      --query Arn \
-      --output text)
-
-    msg SUCCESS "AWS authentication successfully"
-
-    if [[ "$VERBOSE" == true ]]; then
-      msg INFO "Account: $AWS_ACCOUNT_ID"
-      msg INFO "Identity: $USER"
-    fi
-
-  else
-    msg ERROR "AWS credentials are not configured"
-    msg INFO "Run: aws configure"
-    exit 1
-  fi
-}
-
 usage() {
+  local exit_code="${1:-1}"
   cat <<EOF
 $(msg "USAGE:")
 
-  $(basename "$0") [COMMAND] [TARGET] [OPTIONS]
+  $(basename "$0") <ACTION> [TARGET] [OPTIONS]
 
 
-$(msg "COMMANDS:")
+$(msg "ACTIONS:")
 
   --up
-      Create or configure resources.
+      Create and configure infrastructure components.
 
   --down
-      Remove resources.
-
-  --test
-      Validate resource operation.
+      Tear down configured infrastructure components.
 
   --status
-      Display resource status.
+      Display status and health of components.
+
+  --test
+      Run automated test suites.
 
 
 $(msg "TARGETS:")
 
-
-  iam
-      Manage IAM environment.
-
-      Includes:
-          - IAM policies
-          - IAM groups
-          - IAM users
-          - IAM roles (optional)
-
-
-  cloud-trail
-      Manage CloudTrail environment.
-
-      Includes:
-          - CloudTrail trail
-          - S3 audit bucket
-          - Bucket encryption
-          - Bucket policy
-          - Event selectors
-
-
-  event-bridge
-      Manage EventBridge environment.
-
-      Includes:
-          - EventBridge rule
-          - CloudTrail event pattern
-          - IAM event filtering
-          - Rule state
-          - Rule configuration
-          - Rule targets
-          - Event matching metrics
-
-
-  all
-      Manage complete monitoring environment.
-
-      Includes:
-          - IAM environment
-          - CloudTrail environment
-          - EventBridge environment
+  iam           Manage IAM policies, groups, users, and roles.
+  cloud-trail   Manage CloudTrail trail and log S3 bucket.
+  sns           Manage SNS alert topic and subscriptions.
+  lambda        Manage monitoring Lambda function & S3 audit storage.
+  event-bridge  Manage EventBridge rule, CloudTrail filtering & Lambda target.
+  all           Manage complete monitoring infrastructure (default).
 
 
 $(msg "OPTIONS:")
 
-
-  -r, --role
-      Enable IAM role management.
-
-  -v, --verbose
-      Enable verbose output.
-
-  -h, --help
-      Show this help message.
+  -r, --role      Enable IAM role management.
+  -v, --verbose   Enable verbose execution logging.
+  -h, --help      Show this help message.
 
 
 $(msg "EXAMPLES:")
 
-  Create IAM environment:
-      $(basename "$0") --up iam
-
-  Remove IAM environment:
-      $(basename "$0") --down iam
-
-  Create IAM environment with roles:
-      $(basename "$0") --up iam --role
-
-  Create CloudTrail environment:
-      $(basename "$0") --up cloud-trail
+  Create complete infrastructure:
+    $(basename "$0") --up all
 
   Check CloudTrail status:
-      $(basename "$0") --status cloud-trail
+    $(basename "$0") --status cloud-trail
 
-  Remove CloudTrail environment:
-      $(basename "$0") --down cloud-trail
+  Test Lambda component:
+    $(basename "$0") --test lambda
 
-  Create EventBridge environment:
-      $(basename "$0") --up event-bridge
+  Deploy IAM with roles in verbose mode:
+    $(basename "$0") --up iam --role --verbose
 
-  Check EventBridge status:
-      $(basename "$0") --status event-bridge
-
-  Test EventBridge rule:
-      $(basename "$0") --test event-bridge
-
-  Remove EventBridge environment:
-      $(basename "$0") --down event-bridge
-
-  Create complete monitoring environment:
-      $(basename "$0") --up all
-
-  Check complete environment status:
-      $(basename "$0") --status all
-
-  Enable verbose output:
-      $(basename "$0") --up all --verbose
+  Tear down complete infrastructure:
+    $(basename "$0") --down all
 EOF
-  exit 1
+  exit "$exit_code"
 }
 
-main() {
-  local ACTION="--up"
-  local TARGET="all"
+# ---------------------------------------------------------------------------
+# check_aws_auth
+# ---------------------------------------------------------------------------
+check_aws_auth() {
+  msg INFO "Validating AWS credentials..."
 
+  local identity
+  if ! identity=$(aws sts get-caller-identity --output json 2>&1); then
+    msg ERROR "AWS authentication failed. Credentials are not configured or invalid."
+    msg INFO "Run: aws configure"
+    [[ "${VERBOSE:-false}" == true ]] && msg DEBUG "$identity"
+    exit 1
+  fi
+
+  AWS_ACCOUNT_ID=$(jq -r '.Account' <<<"$identity")
+  local user_arn
+  user_arn=$(jq -r '.Arn' <<<"$identity")
+
+  msg SUCCESS "AWS authentication validated (Account: ${AWS_ACCOUNT_ID})"
+  if [[ "${VERBOSE:-false}" == true ]]; then
+    msg DEBUG "Caller Identity ARN: ${user_arn}"
+  fi
+}
+
+# ---------------------------------------------------------------------------
+# check_aws_region
+# ---------------------------------------------------------------------------
+check_aws_region() {
+  msg INFO "Validating AWS region..."
+
+  AWS_REGION="${AWS_REGION:-$(aws configure get region 2>/dev/null || echo '')}"
+
+  if [[ -z "$AWS_REGION" ]]; then
+    AWS_REGION="us-east-1"
+    msg WARNING "AWS region not set in config; defaulting to 'us-east-1'"
+  fi
+
+  msg SUCCESS "AWS region: ${AWS_REGION}"
+}
+
+# ---------------------------------------------------------------------------
+# execute_target TARGET ACTION ARGS...
+# ---------------------------------------------------------------------------
+execute_target() {
+  local target="$1"
+  local action="$2"
+  shift 2
+
+  local pass_args=("$action" --aws-account-id "$AWS_ACCOUNT_ID" --aws-region "$AWS_REGION" "$@")
+
+  case "$target" in
+  iam)
+    run_script "$IAM_CTL_SCRIPT" "$action" --aws-account-id "$AWS_ACCOUNT_ID" "$@"
+    ;;
+  cloud-trail)
+    run_script "$CLOUD_TRAIL_CTL_SCRIPT" "${pass_args[@]}"
+    ;;
+  sns)
+    run_script "$SNS_CTL_SCRIPT" "${pass_args[@]}"
+    ;;
+  lambda)
+    run_script "$LAMBDA_CTL_SCRIPT" "${pass_args[@]}"
+    ;;
+  event-bridge)
+    run_script "$EVENT_BRIDGE_CTL_SCRIPT" "${pass_args[@]}"
+    ;;
+  *)
+    msg ERROR "Unknown target: $target"
+    usage
+    ;;
+  esac
+}
+
+# ---------------------------------------------------------------------------
+# main
+# ---------------------------------------------------------------------------
+main() {
   while [[ $# -gt 0 ]]; do
     case "$1" in
     --up | --down | --status | --test)
       ACTION="$1"
-
-      if [[ $# -lt 2 ]]; then
-        msg ERROR "Missing target"
-        usage
+      if [[ $# -gt 1 && ! "$2" =~ ^- ]]; then
+        TARGET="$2"
+        shift 2
+      else
+        shift 1
       fi
-
-      TARGET="$2"
-      require_variable TARGET
-      shift 2
       ;;
-
     -v | --verbose)
       VERBOSE=true
       shift
       ;;
-
     -r | --role)
       ENABLE_ROLES=true
       shift
       ;;
-
     -h | --help)
-      usage
+      usage 0
       ;;
-
     *)
-      msg ERROR "Unknown option: $1"
-      usage
+      if [[ "$1" =~ ^(iam|cloud-trail|sns|lambda|event-bridge|all)$ ]]; then
+        TARGET="$1"
+        shift
+      else
+        msg ERROR "Unknown option: $1"
+        usage
+      fi
       ;;
     esac
   done
 
-  # Check requirements
-  check_requirements aws jq sed
+  # Validate requirements
+  check_requirements aws jq sed zip openssl
 
+  # Authenticate AWS
   check_aws_auth
   check_aws_region
 
-  ARGS=()
+  local common_flags=()
+  [[ "${VERBOSE:-false}" == true ]] && common_flags+=(--verbose)
+  [[ "${ENABLE_ROLES:-false}" == true ]] && common_flags+=(--role)
 
-  if [[ "$VERBOSE" == true ]]; then
-    ARGS+=(--verbose)
+  msg INFO "Action : ${ACTION}"
+  msg INFO "Target : ${TARGET}"
+  msg INFO "Region : ${AWS_REGION}"
+  msg INFO "Account: ${AWS_ACCOUNT_ID}"
+  msg "========================================================================"
+
+  if [[ "$TARGET" != "all" ]]; then
+    execute_target "$TARGET" "$ACTION" "${common_flags[@]}"
+  else
+    case "$ACTION" in
+    --up)
+      # Deployment Order: IAM -> CloudTrail -> SNS -> Lambda -> EventBridge
+      msg INFO "=== Stage 1/5: IAM Environment ==="
+      execute_target iam "$ACTION" "${common_flags[@]}"
+
+      msg INFO "=== Stage 2/5: CloudTrail Environment ==="
+      execute_target cloud-trail "$ACTION" "${common_flags[@]}"
+
+      msg INFO "=== Stage 3/5: SNS Alert Environment ==="
+      execute_target sns "$ACTION" "${common_flags[@]}"
+
+      msg INFO "=== Stage 4/5: Lambda Monitoring Environment ==="
+      execute_target lambda "$ACTION" "${common_flags[@]}"
+
+      msg INFO "=== Stage 5/5: EventBridge Rules & Target Wiring ==="
+      execute_target event-bridge "$ACTION" "${common_flags[@]}"
+      ;;
+    --down)
+      # Teardown Order: EventBridge -> Lambda -> SNS -> CloudTrail -> IAM
+      msg INFO "=== Teardown Stage 1/5: EventBridge Rules ==="
+      execute_target event-bridge "$ACTION" "${common_flags[@]}"
+
+      msg INFO "=== Teardown Stage 2/5: Lambda Monitoring Environment ==="
+      execute_target lambda "$ACTION" "${common_flags[@]}"
+
+      msg INFO "=== Teardown Stage 3/5: SNS Alert Environment ==="
+      execute_target sns "$ACTION" "${common_flags[@]}"
+
+      msg INFO "=== Teardown Stage 4/5: CloudTrail Environment ==="
+      execute_target cloud-trail "$ACTION" "${common_flags[@]}"
+
+      msg INFO "=== Teardown Stage 5/5: IAM Environment ==="
+      execute_target iam "$ACTION" "${common_flags[@]}"
+      ;;
+    --status | --test)
+      execute_target iam "$ACTION" "${common_flags[@]}"
+      execute_target cloud-trail "$ACTION" "${common_flags[@]}"
+      execute_target sns "$ACTION" "${common_flags[@]}"
+      execute_target lambda "$ACTION" "${common_flags[@]}"
+      execute_target event-bridge "$ACTION" "${common_flags[@]}"
+      ;;
+    esac
   fi
 
-  if [[ "$ENABLE_ROLES" == true ]]; then
-    ARGS+=(--role)
-  fi
-
-  case "${TARGET:-}" in
-
-  iam)
-    run_script "$IAM_CTL_SCRIPT" \
-      "$ACTION" \
-      --aws-account-id "$AWS_ACCOUNT_ID" \
-      "${ARGS[@]}"
-    ;;
-
-  cloud-trail)
-    run_script "$CLOUD_TRAIL_CTL_SCRIPT" \
-      "$ACTION" \
-      --aws-account-id "$AWS_ACCOUNT_ID" \
-      --aws-region "$AWS_REGION" \
-      "${ARGS[@]}"
-    ;;
-
-  event-bridge)
-    run_script "$EVENT_BRIDGE_SCRIPT" \
-      "$ACTION" \
-      --aws-account-id "$AWS_ACCOUNT_ID" \
-      --aws-region "$AWS_REGION" \
-      "${ARGS[@]}"
-    ;;
-
-  all)
-    # IAM
-    run_script "$IAM_CTL_SCRIPT" \
-      "$ACTION" \
-      --aws-account-id "$AWS_ACCOUNT_ID" \
-      "${ARGS[@]}"
-
-    # CLOUD TRAIL
-    run_script "$CLOUD_TRAIL_CTL_SCRIPT" \
-      "$ACTION" \
-      --aws-account-id "$AWS_ACCOUNT_ID" \
-      --aws-region "$AWS_REGION" \
-      "${ARGS[@]}"
-
-    # EVENT BRIDGE
-    run_script "$EVENT_BRIDGE_SCRIPT" \
-      "$ACTION" \
-      --aws-account-id "$AWS_ACCOUNT_ID" \
-      --aws-region "$AWS_REGION" \
-      "${ARGS[@]}"
-    ;;
-
-  *)
-    msg ERROR "Unknown option: ${TARGET:-<none>}"
-    usage
-    ;;
-
-  esac
+  msg SUCCESS "awsctl execution complete for action '${ACTION}' on target '${TARGET}'"
 }
 
-# Load scripts
+# ---------------------------------------------------------------------------
+# Bootstrap
+# ---------------------------------------------------------------------------
 if [[ -s "${LIB_DIR}/common" ]]; then
   # shellcheck disable=SC1091
   . "${LIB_DIR}/common"
 else
-  echo "[ERROR] Missing Script: '${LIB_DIR}/common'"
+  echo "[ERROR] Missing: ${LIB_DIR}/common" >&2
   exit 1
 fi
 load_script "${LIB_DIR}/logger"
 load_script "${LIB_DIR}/requirements"
 
-# Trap errors
-trap 'msg ERROR "Failed at line $LINENO: $BASH_COMMAND"' ERR
+# Load optional .env configuration
+load_env_if_exists "${SCRIPT_DIR}/.env"
 
-# Banner
-cat <<EOF
+trap 'msg ERROR "Unexpected error at line $LINENO: $BASH_COMMAND"' ERR
+
+cat <<'BANNER'
  █████╗ ██╗    ██╗███████╗    ██╗ █████╗ ███╗   ███╗    ███╗   ███╗ ██████╗ ███╗   ██╗██╗████████╗ ██████╗ ██████╗
 ██╔══██╗██║    ██║██╔════╝    ██║██╔══██╗████╗ ████║    ████╗ ████║██╔═══██╗████╗  ██║██║╚══██╔══╝██╔═══██╗██╔══██╗
 ███████║██║ █╗ ██║███████╗    ██║███████║██╔████╔██║    ██╔████╔██║██║   ██║██╔██╗ ██║██║   ██║   ██║   ██║██████╔╝
 ██╔══██║██║███╗██║╚════██║    ██║██╔══██║██║╚██╔╝██║    ██║╚██╔╝██║██║   ██║██║╚██╗██║██║   ██║   ██║   ██║██╔══██╗
 ██║  ██║╚███╔███╔╝███████║    ██║██║  ██║██║ ╚═╝ ██║    ██║ ╚═╝ ██║╚██████╔╝██║ ╚████║██║   ██║   ╚██████╔╝██║  ██║
 ╚═╝  ╚═╝ ╚══╝╚══╝ ╚══════╝    ╚═╝╚═╝  ╚═╝╚═╝     ╚═╝    ╚═╝     ╚═╝ ╚═════╝ ╚═╝  ╚═══╝╚═╝   ╚═╝    ╚═════╝ ╚═╝  ╚═╝
-EOF
+BANNER
 
 main "$@"
