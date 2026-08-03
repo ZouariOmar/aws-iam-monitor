@@ -1,110 +1,61 @@
 #!/usr/bin/env bash
 # =========================================
-# .FILE
-#   user_ctl
+# FILE
+#   iam/src/user_ctl
 #
-# .SYNOPSIS
-#   AWS IAM user lifecycle management script
+# SYNOPSIS
+#   AWS IAM user lifecycle management.
 #
-# .DESCRIPTION
-#   Creates and removes AWS IAM users using
-#   IAM group-based access management.
+# DESCRIPTION
+#   Creates and removes AWS IAM users using group-based
+#   access management.
 #
-#   Users are never granted permissions directly.
-#   Access is inherited from IAM groups following
-#   AWS IAM best practices and the Principle of
-#   Least Privilege (PoLP).
+#   Users are never granted permissions directly. Access is
+#   inherited from IAM groups (Principle of Least Privilege).
 #
-#   Supported lifecycle operations:
-#       - Create IAM users
-#       - Add users to IAM groups
-#       - Remove users from IAM groups
-#       - Delete IAM users
+#   Lifecycle operations:
+#     --up    Create the user (idempotent) and add to the
+#             specified group if not already a member.
+#     --down  Remove the user from its group, then delete
+#             the user.
 #
-#   This script is part of aws-iam-monitor,
-#   a real-time AWS IAM auditing and monitoring
-#   project.
+# USAGE
+#   ./user_ctl --up   --user <name> --group <name> [OPTIONS]
+#   ./user_ctl --down --user <name> --group <name> [OPTIONS]
 #
-# .INPUTS
-#   Command line arguments:
+# OPTIONS
+#   --up | --down    Lifecycle action (required).
+#   --user  <name>   IAM user name (required).
+#   --group <name>   IAM group name (required).
+#   -v, --verbose    Enable verbose output.
+#   -h, --help       Show this help.
 #
-#   --up
-#       Create an IAM user and add it to a group.
-#
-#   --down
-#       Remove an IAM user from its group and
-#       delete the user.
-#
-#   --user <user>
-#       IAM user name.
-#
-#   --group <group>
-#       IAM group name.
-#
-#   -v, --verbose
-#       Enable verbose execution logs.
-#
-# .OUTPUTS
-#   Creates or deletes IAM users.
-#
-#   Manages IAM group membership.
-#
-#   Outputs lifecycle logs to stdout.
-#
-# .NOTES
-#   Project       : aws-iam-monitor
-#   Version       : 1.0
-#   Author        : @ZouariOmar (zouariomar20@gmail.com)
-#   Created       : 20/07/2026
-#   Change Log    : 1.0 Initial release
-#
-# .EXAMPLE
-#
+# EXAMPLES
 #   Create a user:
-#
-#       ./user_ctl \
-#           --up \
-#           --user DevAdmin \
-#           --group DevGroup
+#     ./user_ctl --up --user DevAdmin --group DevGroup
 #
 #   Delete a user:
+#     ./user_ctl --down --user DevAdmin --group DevGroup
 #
-#       ./user_ctl \
-#           --down \
-#           --user DevAdmin \
-#           --group DevGroup
+# DEPENDENCIES
+#   AWS CLI v2, jq
 #
-#   Enable verbose mode:
+# REQUIRED IAM PERMISSIONS
+#   iam:CreateUser    iam:GetUser    iam:DeleteUser
+#   iam:AddUserToGroup  iam:RemoveUserFromGroup  iam:GetGroup
 #
-#       ./user_ctl \
-#           --up \
-#           --user DevAdmin \
-#           --group DevGroup \
-#           --verbose
+# EXIT CODES
+#   0   Success
+#   1   Error
 #
-# .REQUIREMENTS
-#   - AWS CLI v2
-#   - Configured AWS credentials
-#   - Shared project libraries:
-#       lib/common
-#       lib/logger
-#       lib/requirements
+# NOTES
+#   Project     : aws-iam-monitor
+#   Version     : 2.0
+#   Author      : @ZouariOmar (zouariomar20@gmail.com)
+#   Created     : 20/07/2026
+#   Updated     : 03/08/2026
 #
-#   Required IAM permissions:
-#
-#       iam:CreateUser
-#       iam:GetUser
-#       iam:DeleteUser
-#       iam:AddUserToGroup
-#       iam:RemoveUserFromGroup
-#       iam:GetGroup
-#
-# .SECURITY
-#   - No direct IAM user policy attachments.
-#   - Permissions are inherited through IAM groups.
-#   - Supports least privilege access management.
-#
-# shellcheck disable=SC1090
+# shellcheck disable=SC1090,SC1091
 # =========================================
 set -Eeuo pipefail
 
@@ -112,11 +63,13 @@ set -Eeuo pipefail
 ### CONFIGURATION ###
 #####################
 
-# Directories
-LIB_DIR="${LIB_DIR:-lib}"
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+LIB_DIR="${LIB_DIR:-${SCRIPT_DIR}/../../lib}"
 
-# Global vars
-VERBOSE=${VERBOSE:-false}
+USER=""
+GROUP=""
+ACTION=""
+VERBOSE="${VERBOSE:-false}"
 
 ######################
 ### !CONFIGURATION ###
@@ -126,166 +79,149 @@ usage() {
   cat <<EOF
 $(msg "USAGE:")
 
-  $(basename "$0") <--up|--down> --user <user> --group <group>
+  $(basename "$0") --up   --user <name> --group <name> [OPTIONS]
+  $(basename "$0") --down --user <name> --group <name> [OPTIONS]
+
+
+$(msg "ACTIONS:")
+
+  --up
+      Create an IAM user and add to the specified group.
+      Idempotent: skips existing resources.
+
+  --down
+      Remove the user from the group and delete the user.
 
 
 $(msg "OPTIONS:")
 
-  --up
-      Create an IAM user and add it to a group.
-
-  --down
-      Remove an IAM user from its group and delete it.
-
-  --user <user>
-      IAM user name.
-
-  --group <group>
-      IAM group name.
-
-  -v, --verbose
-      Enable verbose lifecycle logs.
-
-  -h, --help
-      Show this help message.
+  --user  <name>   IAM user name.
+  --group <name>   IAM group name.
+  -v, --verbose    Enable verbose output.
+  -h, --help       Show this help.
 
 
 $(msg "EXAMPLES:")
 
   Create a user:
-
-      $(basename "$0") --up \
-          --user DevAdmin \
-          --group DevGroup
-
+    $(basename "$0") --up --user DevAdmin --group DevGroup
 
   Delete a user:
+    $(basename "$0") --down --user DevAdmin --group DevGroup
 
-      $(basename "$0") --down \
-          --user DevAdmin \
-          --group DevGroup
-
-
-  Create with verbose output:
-
-      $(basename "$0") --up \
-          --user DevAdmin \
-          --group DevGroup \
-          --verbose
+  Verbose:
+    $(basename "$0") --up --user DevAdmin --group DevGroup --verbose
 EOF
   exit 1
 }
 
+# ---------------------------------------------------------------------------
+# create_user
+# ---------------------------------------------------------------------------
 create_user() {
-  local USERNAME=$1
-  local GROUP_NAME=$2
+  msg INFO "Creating user: $USER"
 
-  if ! aws iam get-user \
-    --user-name "$USERNAME" >/dev/null 2>&1; then
-
-    aws iam create-user \
-      --user-name "$USERNAME" >/dev/null || {
-      msg ERROR "Failed creating IAM user: $USERNAME"
+  if ! aws iam get-user --user-name "$USER" &>/dev/null; then
+    local err
+    if ! err=$(aws iam create-user --user-name "$USER" --output json 2>&1); then
+      msg ERROR "Failed to create user '$USER'"
+      [[ "${VERBOSE:-false}" == true ]] && msg DEBUG "$err"
       exit 1
-    }
-
-    if [[ "$VERBOSE" == true ]]; then
-      msg SUCCESS "Created user: $USERNAME"
     fi
-
+    msg SUCCESS "User created: $USER"
   else
-    msg INFO "User exists: $USERNAME"
+    msg INFO "User already exists: $USER"
   fi
 
-  if ! aws iam get-group \
-    --group-name "$GROUP_NAME" \
-    --output json |
-    jq -e --arg USERNAME "$USERNAME" \
-      '.Users // [] | any(.UserName == $USERNAME)' >/dev/null 2>&1; then
-
-    aws iam add-user-to-group \
-      --group-name "$GROUP_NAME" \
-      --user-name "$USERNAME"
-
-    if [[ "$VERBOSE" == true ]]; then
-      msg SUCCESS "Added $USERNAME to $GROUP_NAME"
-    fi
-  fi
-}
-
-delete_user() {
-  local USERNAME=$1
-  local GROUP_NAME=$2
-
-  if ! aws iam get-user \
-    --user-name "$USERNAME" >/dev/null 2>&1; then
-
-    msg INFO "User '$USERNAME' does not exist."
-
-    return
-  fi
-
-  msg INFO "Removing user '$USERNAME' from group '$GROUP_NAME'"
-
-  if aws iam get-group \
-    --group-name "$GROUP_NAME" \
+  # Add to group if not already a member.
+  local is_member
+  is_member=$(aws iam get-group \
+    --group-name "$GROUP" \
     --output json 2>/dev/null |
-    jq -e --arg USERNAME "$USERNAME" \
-      '.Users[].UserName | select(. == $USERNAME)' >/dev/null 2>&1; then
+    jq -e --arg u "$USER" '.Users // [] | any(.UserName == $u)' 2>/dev/null ||
+    echo false)
 
-    aws iam remove-user-from-group \
-      --group-name "$GROUP_NAME" \
-      --user-name "$USERNAME" || {
-      msg ERROR "Failed removing '$USERNAME' from '$GROUP_NAME'"
+  if [[ "$is_member" != "true" ]]; then
+    local err
+    if ! err=$(aws iam add-user-to-group \
+      --group-name "$GROUP" \
+      --user-name "$USER" 2>&1); then
+      msg ERROR "Failed to add '$USER' to group '$GROUP'"
+      [[ "${VERBOSE:-false}" == true ]] && msg DEBUG "$err"
       exit 1
-    }
-
-    [[ "$VERBOSE" == true ]] &&
-      msg SUCCESS "Removed $USERNAME from $GROUP_NAME"
-  fi
-
-  msg INFO "Deleting user: $USERNAME"
-
-  aws iam delete-user \
-    --user-name "$USERNAME" >/dev/null 2>&1 || {
-    msg ERROR "Failed deleting user: $USERNAME"
-    exit 1
-  }
-
-  if [ "$VERBOSE" == true ]; then
-    msg SUCCESS "Deleted user: $USERNAME"
+    fi
+    msg SUCCESS "Added '$USER' to group '$GROUP'"
+  else
+    msg INFO "User '$USER' already in group '$GROUP'"
   fi
 }
 
+# ---------------------------------------------------------------------------
+# delete_user
+# ---------------------------------------------------------------------------
+delete_user() {
+  msg INFO "Deleting user: $USER"
+
+  if ! aws iam get-user --user-name "$USER" &>/dev/null; then
+    msg INFO "User '$USER' does not exist — nothing to delete"
+    return 0
+  fi
+
+  # Remove from group if member.
+  local is_member
+  is_member=$(aws iam get-group \
+    --group-name "$GROUP" \
+    --output json 2>/dev/null |
+    jq -e --arg u "$USER" '.Users // [] | any(.UserName == $u)' 2>/dev/null ||
+    echo false)
+
+  if [[ "$is_member" == "true" ]]; then
+    local err
+    if ! err=$(aws iam remove-user-from-group \
+      --group-name "$GROUP" \
+      --user-name "$USER" 2>&1); then
+      msg ERROR "Failed to remove '$USER' from group '$GROUP'"
+      [[ "${VERBOSE:-false}" == true ]] && msg DEBUG "$err"
+      exit 1
+    fi
+    [[ "${VERBOSE:-false}" == true ]] && msg DEBUG "Removed '$USER' from '$GROUP'"
+  fi
+
+  local err
+  if ! err=$(aws iam delete-user --user-name "$USER" 2>&1); then
+    msg ERROR "Failed to delete user '$USER'"
+    [[ "${VERBOSE:-false}" == true ]] && msg DEBUG "$err"
+    exit 1
+  fi
+
+  msg SUCCESS "User deleted: $USER"
+}
+
+# ---------------------------------------------------------------------------
+# main
+# ---------------------------------------------------------------------------
 main() {
   while [[ $# -gt 0 ]]; do
     case "$1" in
-    -v | --verbose)
-      VERBOSE=true
-      shift
-      ;;
-
     --up | --down)
       ACTION="$1"
       shift
       ;;
-
     --user)
       USER="$2"
-      require_variable USER
       shift 2
       ;;
-
     --group)
       GROUP="$2"
-      require_variable GROUP
       shift 2
       ;;
-
+    -v | --verbose)
+      VERBOSE=true
+      shift
+      ;;
     -h | --help)
       usage
       ;;
-
     *)
       msg ERROR "Unknown option: $1"
       usage
@@ -293,32 +229,31 @@ main() {
     esac
   done
 
+  require_variable USER
+  require_variable GROUP
+
   case "${ACTION:-}" in
-  --up)
-    msg INFO "Creating IAM user: $USER"
-    create_user "$USER" "$GROUP"
-    ;;
-
-  --down)
-    msg INFO "Deleting IAM user: $USER"
-    delete_user "$USER" "$GROUP"
-    ;;
-
+  --up) create_user ;;
+  --down) delete_user ;;
   *)
-    msg ERROR "Missing action (--up or --down)"
+    msg ERROR "Action required: --up or --down"
     usage
     ;;
   esac
 }
 
-# Load scripts
+# ---------------------------------------------------------------------------
+# Bootstrap
+# ---------------------------------------------------------------------------
 if [[ -s "${LIB_DIR}/common" ]]; then
   # shellcheck disable=SC1091
   . "${LIB_DIR}/common"
 else
-  echo "[ERROR] Missing Script: '${LIB_DIR}/common'"
+  echo "[ERROR] Missing: ${LIB_DIR}/common" >&2
   exit 1
 fi
 load_script "${LIB_DIR}/logger"
+
+trap 'msg ERROR "Unexpected error at line $LINENO: $BASH_COMMAND"' ERR
 
 main "$@"
