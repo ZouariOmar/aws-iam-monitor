@@ -9,7 +9,7 @@
 project = "aws-iam-monitor"
 copyright = "2026, Zouari Omar"
 author = "Zouari Omar"
-release = "0.1.0"
+release = "1.0.0"
 contributors_repository = "ZouariOmar/aws-iam-monitor"
 
 # -- General configuration ---------------------------------------------------

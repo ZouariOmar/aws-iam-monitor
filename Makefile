@@ -110,12 +110,12 @@ format: ## Fromat the project
 docs: docs-html ## Document the project to html
 
 .PHONY: docs-deploy
-docs-deploy:
+docs-deploy: ## Deploy the project documentation
 	@$(call print_title,Deploy Documentation...)
 	@$(DOCS_DEPLOY_CMD)
 
 .PHONY: docs-preview
-docs-preview: docs-html
+docs-preview: docs-html ## Deploy the project documentation (preview mode)
 	@$(call print_title,Preview Documentation...)
 	@$(DOCS_PREVIEW_CMD)
 
