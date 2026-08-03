@@ -1,288 +1,416 @@
 #!/usr/bin/env bash
 # =========================================
-# .FILE
-#   event_bridge_ctl
+# FILE
+#   event-bridge/src/event_bridge_ctl
 #
-# .SYNOPSIS
-#   Amazon EventBridge management
-#   automation script.
+# SYNOPSIS
+#   Amazon EventBridge rule lifecycle management for IAM monitoring.
 #
-# .DESCRIPTION
-#   Creates, configures, monitors,
-#   and removes an Amazon EventBridge
-#   rule used for IAM monitoring.
+# DESCRIPTION
+#   Creates, configures, monitors, tests, and removes an Amazon EventBridge
+#   rule that filters AWS CloudTrail IAM events and targets the monitoring
+#   AWS Lambda function.
 #
-#   The rule listens for AWS CloudTrail
-#   IAM API events and serves as the
-#   entry point for the monitoring
-#   pipeline.
+#   Lifecycle operations:
+#     --up      Create or update the EventBridge rule (idempotent; compares
+#               SHA-256 pattern hash), register the Lambda target, and
+#               grant invocation permission to EventBridge.
+#     --down    Remove targets from the rule, revoke Lambda invocation
+#               permission, then delete the rule.
+#     --status  Report rule existence, pattern configuration, state,
+#               targets, and CloudWatch event-matching metrics.
+#     --test    Execute all automated test scripts in test/.
 #
-# .USAGE
-#   ./event_bridge_ctl [OPTIONS] ACTION
+# USAGE
+#   ./event_bridge_ctl --up   --aws-account-id <id> --aws-region <region> [OPTIONS]
+#   ./event_bridge_ctl --down --aws-region <region> [OPTIONS]
+#   ./event_bridge_ctl --status --aws-region <region> [OPTIONS]
+#   ./event_bridge_ctl --test [OPTIONS]
 #
-# .ACTIONS
-#   --up
-#       Create the EventBridge rule.
+# OPTIONS
+#   --up | --down | --status | --test   Lifecycle action (required).
+#   --aws-account-id <id>               AWS account ID.
+#   --aws-region   <region>             AWS region (required).
+#   --rule-name    <name>               EventBridge rule name.
+#                                       Default: aws-iam-monitor-rule
+#   --event-pattern-file <path>         Path to JSON event pattern.
+#                                       Default: <script>/../policies/iam-event-pattern.json
+#   --lambda-arn   <arn>                Target Lambda function ARN.
+#                                       Default: derived from account & region.
+#   -v, --verbose                       Enable verbose execution output.
+#   -h, --help                          Show this help.
 #
-#   --down
-#       Delete the EventBridge rule.
+# EXAMPLES
+#   Create EventBridge rule with Lambda target:
+#     ./event_bridge_ctl --up \
+#       --aws-account-id 123456789012 \
+#       --aws-region us-east-1
 #
-#   --status
-#       Display rule status.
+#   Check rule status:
+#     ./event_bridge_ctl --status --aws-region us-east-1
 #
-# .REQUIREMENTS
-#   - AWS CLI v2
-#   - EventBridge permissions
+#   Run tests:
+#     ./event_bridge_ctl --test
+#
+#   Delete EventBridge rule:
+#     ./event_bridge_ctl --down --aws-region us-east-1
+#
+# DEPENDENCIES
+#   AWS CLI v2, jq, sha256sum
+#
+# REQUIRED IAM PERMISSIONS
+#   events:PutRule          events:DeleteRule       events:DescribeRule
+#   events:EnableRule       events:DisableRule      events:ListTargetsByRule
+#   events:PutTargets       events:RemoveTargets
+#   lambda:AddPermission    lambda:RemovePermission
+#   cloudwatch:GetMetricStatistics
+#
+# EXIT CODES
+#   0   Success
+#   1   Error
+#
+# NOTES
+#   Project     : aws-iam-monitor
+#   Version     : 2.0
+#   Author      : @ZouariOmar (zouariomar20@gmail.com)
+#   Created     : 20/07/2026
+#   Updated     : 03/08/2026
+#
+# shellcheck disable=SC1090,SC1091
 # =========================================
 set -Eeuo pipefail
 
 #####################
-### Configuration ###
+### CONFIGURATION ###
 #####################
 
-# Directories
-LIB_DIR="${LIB_DIR:-lib}"
-EVENT_BRIDGE_DIR="${EVENT_BRIDGE_DIR:-event-bridge}"
-EVENT_BRIDGE_POLICIES_DIR="${EVENT_BRIDGE_POLICIES_DIR:-${EVENT_BRIDGE_DIR}/policies}"
-EVENT_BRIDGE_TEST_DIR="${EVENT_BRIDGE_TEST_DIR:-${EVENT_BRIDGE_DIR}/test}"
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+LIB_DIR="${LIB_DIR:-${SCRIPT_DIR}/../../lib}"
 
-# Files
-EVENT_PATTERN_FILE="${EVENT_PATTERN_FILE:-${EVENT_BRIDGE_POLICIES_DIR}/iam-event-pattern.json}"
+EVENT_BRIDGE_POLICIES_DIR="${SCRIPT_DIR}/../policies"
+EVENT_BRIDGE_TEST_DIR="${SCRIPT_DIR}/../test"
 
-# AWS vars
-AWS_ACCOUNT_ID=${AWS_ACCOUNT_ID:-}
-AWS_REGION=${AWS_REGION:-}
-
-# Global vars
-VERBOSE=${VERBOSE:-false}
-
-# EventBridge vars
-RULE_NAME=${RULE_NAME:-"aws-iam-monitor-rule"}
+# Defaults.
+AWS_ACCOUNT_ID=""
+AWS_REGION=""
+RULE_NAME="aws-iam-monitor-rule"
+EVENT_PATTERN_FILE="${EVENT_BRIDGE_POLICIES_DIR}/iam-event-pattern.json"
+LAMBDA_FUNCTION_NAME="aws-iam-monitor-lambda"
+LAMBDA_ARN=""
+ACTION=""
+VERBOSE="${VERBOSE:-false}"
 
 ######################
-### !Configuration ###
+### !CONFIGURATION ###
 ######################
 
 usage() {
   cat <<EOF
 $(msg "USAGE:")
-  $(basename "$0") [OPTIONS] ACTION
+
+  $(basename "$0") <--up|--down|--status|--test> --aws-region <region> [OPTIONS]
+
 
 $(msg "ACTIONS:")
+
   --up
-      Create and configure the
-      EventBridge rule.
+      Create or update the EventBridge rule, attach the Lambda target,
+      and grant invocation permission to EventBridge.
 
   --down
-      Delete the EventBridge rule.
+      Remove targets, revoke Lambda permission, and delete the rule.
 
   --status
-      Display EventBridge rule
-      status.
+      Display rule state, pattern, targets, and metrics.
+
+  --test
+      Execute all tests in event-bridge/test/.
+
 
 $(msg "OPTIONS:")
-  --aws-region <region>
-      AWS region where the rule
-      resides.
 
-  --rule-name <name>
-      EventBridge rule name.
+  --aws-account-id <id>        AWS account ID.
+  --aws-region   <region>      AWS region.
+  --rule-name    <name>        Rule name (default: aws-iam-monitor-rule).
+  --event-pattern-file <path>  Path to pattern JSON file.
+  --lambda-arn   <arn>         Target Lambda function ARN.
+  -v, --verbose                Enable verbose execution output.
+  -h, --help                   Show this help message.
 
-      Default:
-        iam-cloudtrail-events
-
-  --event-pattern-file <file>
-      JSON file containing the
-      EventBridge event pattern.
-
-      Default:
-        event-bridge/policies/
-        iam-event-pattern.json
-
-  -v, --verbose
-      Enable verbose output.
-
-  -h, --help
-      Display this help message.
 
 $(msg "EXAMPLES:")
-  Create the EventBridge rule:
-    $(basename "$0") \\
-      --aws-region us-east-1 \\
-      --up
 
-  Create a rule using a custom
-  event pattern:
-    $(basename "$0") \\
-      --aws-region us-east-1 \\
-      --event-pattern-file policies/custom-pattern.json \\
-      --up
+  Create rule:
+    $(basename "$0") --up --aws-account-id 123456789012 --aws-region us-east-1
 
-  Display rule status:
-    $(basename "$0") \\
-      --aws-region us-east-1 \\
-      --status
+  Check status:
+    $(basename "$0") --status --aws-region us-east-1
 
-  Delete the EventBridge rule:
-    $(basename "$0") \\
-      --aws-region us-east-1 \\
-      --down
+  Run tests:
+    $(basename "$0") --test
+
+  Delete rule:
+    $(basename "$0") --down --aws-region us-east-1
 EOF
+  exit 1
 }
 
+# ---------------------------------------------------------------------------
+# create_rule
+# ---------------------------------------------------------------------------
 create_rule() {
-  msg INFO "Creating EventBridge rule..."
+  msg INFO "Creating/updating EventBridge rule: $RULE_NAME"
 
-  if aws events describe-rule \
-    --name "$RULE_NAME" >/dev/null 2>&1; then
+  if [[ ! -f "$EVENT_PATTERN_FILE" ]]; then
+    msg ERROR "Event pattern file missing: $EVENT_PATTERN_FILE"
+    exit 1
+  fi
 
-    local CURRENT_EVENT_PATTERN_HASH
-    CURRENT_EVENT_PATTERN_HASH=$(
-      aws events describe-rule \
+  # 1. Create or update rule pattern.
+  local exists=false
+  if aws events describe-rule --name "$RULE_NAME" --region "$AWS_REGION" &>/dev/null; then
+    exists=true
+
+    local current_hash new_hash
+    current_hash=$(aws events describe-rule \
+      --name "$RULE_NAME" \
+      --region "$AWS_REGION" \
+      --query 'EventPattern' \
+      --output text |
+      jq -S . |
+      sha256sum |
+      cut -d' ' -f1)
+
+    new_hash=$(jq -S . "$EVENT_PATTERN_FILE" | sha256sum | cut -d' ' -f1)
+
+    if [[ "$current_hash" == "$new_hash" ]]; then
+      msg INFO "Rule pattern for '$RULE_NAME' is already up to date"
+    else
+      msg INFO "Updating EventBridge rule pattern..."
+      aws events put-rule \
         --name "$RULE_NAME" \
-        --query 'EventPattern' \
-        --output text |
-        jq -S . |
-        sha256sum |
-        cut -d' ' -f1
-    )
-
-    local NEW_EVENT_PATTERN_HASH
-    NEW_EVENT_PATTERN_HASH=$(
-      jq -S . "$EVENT_PATTERN_FILE" |
-        sha256sum |
-        cut -d' ' -f1
-    )
-
-    if [[ "$CURRENT_EVENT_PATTERN_HASH" == "$NEW_EVENT_PATTERN_HASH" ]]; then
-      msg INFO "Rule '$RULE_NAME' is already up to date."
-      return
+        --event-pattern "file://${EVENT_PATTERN_FILE}" \
+        --state ENABLED \
+        --region "$AWS_REGION" >/dev/null
+      msg SUCCESS "Rule pattern updated"
     fi
-
-    msg INFO "Updating EventBridge rule..."
-
   else
-    msg INFO "Rule does not exist. Creating it..."
+    msg INFO "Rule does not exist. Creating..."
+    local err
+    if ! err=$(aws events put-rule \
+      --name "$RULE_NAME" \
+      --event-pattern "file://${EVENT_PATTERN_FILE}" \
+      --state ENABLED \
+      --region "$AWS_REGION" \
+      --output json 2>&1); then
+      msg ERROR "Failed to create EventBridge rule '$RULE_NAME'"
+      [[ "${VERBOSE:-false}" == true ]] && msg DEBUG "$err"
+      exit 1
+    fi
+    msg SUCCESS "EventBridge rule created: $RULE_NAME"
   fi
 
-  aws events put-rule \
-    --name "$RULE_NAME" \
-    --event-pattern "file://${EVENT_PATTERN_FILE}" \
-    --state ENABLED >/dev/null
+  # 2. Grant EventBridge permission to invoke the Lambda function.
+  if [[ -n "$LAMBDA_ARN" ]]; then
+    msg INFO "Granting EventBridge permission to invoke Lambda..."
 
-  msg SUCCESS "Rule configured successfully."
+    local rule_arn
+    rule_arn=$(build_arn events "$AWS_REGION" "$AWS_ACCOUNT_ID" "rule/${RULE_NAME}")
+
+    # Statement ID must be unique per rule association.
+    local statement_id="eventbridge-invoke-${RULE_NAME}"
+
+    aws lambda add-permission \
+      --function-name "$LAMBDA_FUNCTION_NAME" \
+      --statement-id "$statement_id" \
+      --action "lambda:InvokeFunction" \
+      --principal "events.amazonaws.com" \
+      --source-arn "$rule_arn" \
+      --region "$AWS_REGION" >/dev/null 2>&1 || {
+      [[ "${VERBOSE:-false}" == true ]] && msg DEBUG "Lambda permission statement '$statement_id' already exists"
+    }
+
+    msg SUCCESS "Lambda permission granted"
+
+    # 3. Add Lambda as target for the rule.
+    msg INFO "Registering Lambda target with EventBridge rule..."
+
+    local target_json
+    target_json=$(jq -n \
+      --arg id "Target1" \
+      --arg arn "$LAMBDA_ARN" \
+      '[{Id: $id, Arn: $arn}]')
+
+    aws events put-targets \
+      --rule "$RULE_NAME" \
+      --targets "$target_json" \
+      --region "$AWS_REGION" >/dev/null
+
+    msg SUCCESS "Lambda target registered: $LAMBDA_ARN"
+  else
+    msg WARNING "No Lambda ARN provided — skipping target registration"
+  fi
 }
 
+# ---------------------------------------------------------------------------
+# delete_rule
+# ---------------------------------------------------------------------------
 delete_rule() {
-  msg INFO "Deleting EventBridge rule..."
+  msg INFO "Deleting EventBridge rule: $RULE_NAME"
 
-  if ! aws events describe-rule \
-    --name "$RULE_NAME" >/dev/null 2>&1; then
-    msg INFO "Rule already deleted"
-    return
-  fi
-
-  aws events delete-rule \
-    --name "$RULE_NAME"
-
-  msg SUCCESS "Rule deleted"
-}
-
-rule_status() {
-  msg INFO "Checking rule..."
-
-  if ! aws events describe-rule \
-    --name "$RULE_NAME" >/dev/null 2>&1; then
-    msg ERROR "EventBridge rule '$RULE_NAME' does not exist."
-    return
-  fi
-
-  msg SUCCESS "Rule exists"
-
-  msg INFO "Rule Status:"
-  aws events describe-rule \
-    --name "$RULE_NAME"
-
-  msg INFO "Rule Target(s):"
-  aws events list-targets-by-rule \
-    --rule aws-iam-monitor-rule
-
-  msg SUCCESS "Rule status check complete"
-}
-
-test_rule() {
-  msg INFO "Running EventBridge tests..."
-
-  if [[ ! -d "$EVENT_BRIDGE_TEST_DIR" ]]; then
-    msg ERROR "Test directory not found: ${EVENT_BRIDGE_TEST_DIR}"
-    return 1
-  fi
-
-  local TESTS
-  TESTS=$(find "$EVENT_BRIDGE_TEST_DIR" -type f | sort)
-
-  if [[ -z "$TESTS" ]]; then
-    msg WARNING "No tests found in ${EVENT_BRIDGE_TEST_DIR}"
+  if ! aws events describe-rule --name "$RULE_NAME" --region "$AWS_REGION" &>/dev/null; then
+    msg INFO "Rule '$RULE_NAME' does not exist — nothing to delete"
     return 0
   fi
 
-  local FAILED=0
+  # 1. Remove targets from rule first (AWS requirement).
+  msg INFO "Removing targets from rule..."
+  local target_ids
+  target_ids=$(aws events list-targets-by-rule \
+    --rule "$RULE_NAME" \
+    --region "$AWS_REGION" \
+    --query 'Targets[].Id' \
+    --output text 2>/dev/null |
+    tr '\t' ' ')
 
-  while IFS= read -r TEST_FILE; do
+  if [[ -n "$target_ids" ]]; then
+    # Convert space-separated IDs to array for CLI.
+    # shellcheck disable=SC2086
+    aws events remove-targets \
+      --rule "$RULE_NAME" \
+      --ids $target_ids \
+      --region "$AWS_REGION" >/dev/null
+    msg SUCCESS "Targets removed"
+  fi
 
-    if [[ ! -x "$TEST_FILE" ]]; then
-      msg WARNING "Skipping non executable test: ${TEST_FILE}"
+  # 2. Revoke Lambda permission if Lambda exists.
+  if aws lambda get-function --function-name "$LAMBDA_FUNCTION_NAME" --region "$AWS_REGION" &>/dev/null; then
+    local statement_id="eventbridge-invoke-${RULE_NAME}"
+    aws lambda remove-permission \
+      --function-name "$LAMBDA_FUNCTION_NAME" \
+      --statement-id "$statement_id" \
+      --region "$AWS_REGION" >/dev/null 2>&1 || true
+    [[ "${VERBOSE:-false}" == true ]] && msg DEBUG "Revoked Lambda permission statement"
+  fi
+
+  # 3. Delete rule.
+  aws events delete-rule --name "$RULE_NAME" --region "$AWS_REGION"
+
+  msg SUCCESS "EventBridge rule deleted: $RULE_NAME"
+}
+
+# ---------------------------------------------------------------------------
+# rule_status
+# ---------------------------------------------------------------------------
+rule_status() {
+  msg INFO "Checking EventBridge rule status: $RULE_NAME"
+
+  if ! aws events describe-rule --name "$RULE_NAME" --region "$AWS_REGION" &>/dev/null; then
+    msg WARNING "EventBridge rule '$RULE_NAME' does not exist"
+    return 0
+  fi
+
+  msg SUCCESS "EventBridge rule exists: $RULE_NAME"
+
+  msg INFO "Rule Description:"
+  aws events describe-rule \
+    --name "$RULE_NAME" \
+    --region "$AWS_REGION" \
+    --output json
+
+  msg INFO "Rule Target(s):"
+  aws events list-targets-by-rule \
+    --rule "$RULE_NAME" \
+    --region "$AWS_REGION" \
+    --output json
+}
+
+# ---------------------------------------------------------------------------
+# test_rule
+# ---------------------------------------------------------------------------
+test_rule() {
+  msg INFO "Running EventBridge test suite..."
+
+  if [[ ! -d "$EVENT_BRIDGE_TEST_DIR" ]]; then
+    msg ERROR "Test directory not found: $EVENT_BRIDGE_TEST_DIR"
+    return 1
+  fi
+
+  local test_files
+  test_files=$(find "$EVENT_BRIDGE_TEST_DIR" -maxdepth 1 -type f | sort)
+
+  if [[ -z "$test_files" ]]; then
+    msg WARNING "No tests found in $EVENT_BRIDGE_TEST_DIR"
+    return 0
+  fi
+
+  local failed=0
+  local test_file
+
+  while IFS= read -r test_file; do
+    [[ -z "$test_file" ]] && continue
+
+    if [[ ! -x "$test_file" ]]; then
+      msg WARNING "Skipping non-executable test: $test_file"
       continue
     fi
 
-    msg INFO "Running test: ${TEST_FILE}"
+    msg INFO "Running test: $(basename "$test_file")"
 
-    if "$TEST_FILE"; then
-      msg SUCCESS "Passed: ${TEST_FILE}"
-
+    if "$test_file"; then
+      msg SUCCESS "Passed: $(basename "$test_file")"
     else
-      msg ERROR "Failed: ${TEST_FILE}"
-      FAILED=$((FAILED + 1))
+      msg ERROR "Failed: $(basename "$test_file")"
+      failed=$((failed + 1))
     fi
 
-  done <<<"$TESTS"
+  done <<<"$test_files"
 
-  if [[ "$FAILED" -gt 0 ]]; then
-    msg ERROR "${FAILED} EventBridge test(s) failed"
+  if [[ "$failed" -gt 0 ]]; then
+    msg ERROR "$failed EventBridge test(s) failed"
     return 1
   fi
 
   msg SUCCESS "All EventBridge tests passed"
 }
 
+# ---------------------------------------------------------------------------
+# main
+# ---------------------------------------------------------------------------
 main() {
   while [[ $# -gt 0 ]]; do
     case "$1" in
-    --aws-account-id)
-      AWS_ACCOUNT_ID="$2"
-      shift 2
-      ;;
-
-    --aws-region)
-      AWS_REGION="$2"
-      require_variable AWS_REGION
-      shift 2
-      ;;
-
-    -v | --verbose)
-      VERBOSE=true
-      shift
-      ;;
-
     --up | --down | --status | --test)
       ACTION="$1"
       shift
       ;;
-
+    --aws-account-id)
+      AWS_ACCOUNT_ID="$2"
+      shift 2
+      ;;
+    --aws-region)
+      AWS_REGION="$2"
+      shift 2
+      ;;
+    --rule-name)
+      RULE_NAME="$2"
+      shift 2
+      ;;
+    --event-pattern-file)
+      EVENT_PATTERN_FILE="$2"
+      shift 2
+      ;;
+    --lambda-arn)
+      LAMBDA_ARN="$2"
+      shift 2
+      ;;
+    -v | --verbose)
+      VERBOSE=true
+      shift
+      ;;
     -h | --help)
       usage
       ;;
-
     *)
       msg ERROR "Unknown option: $1"
       usage
@@ -290,60 +418,56 @@ main() {
     esac
   done
 
-  EVENT_BRIDGE_RULE_ARN="arn:aws:events:${AWS_REGION}:${AWS_ACCOUNT_ID}:rule/${RULE_NAME}"
+  require_variable AWS_REGION
 
-  msg =========================================================================================================
-  msg INFO "EventBridge Console...https://${AWS_REGION}.console.aws.amazon.com/events/home?region=${AWS_REGION}#/rules"
-  msg INFO "Rule Name.............${RULE_NAME}"
-  msg INFO "Rule ARN..............${EVENT_BRIDGE_RULE_ARN}"
-  msg INFO "Event Pattern.........${EVENT_PATTERN_FILE}"
-  msg INFO "Event Bus.............default"
-  msg INFO "Region................${AWS_REGION}"
-  msg INFO "AWS Account...........${AWS_ACCOUNT_ID}"
-  msg =========================================================================================================
+  if [[ -z "$LAMBDA_ARN" && -n "$AWS_ACCOUNT_ID" ]]; then
+    LAMBDA_ARN=$(build_arn lambda "$AWS_REGION" "$AWS_ACCOUNT_ID" "function:${LAMBDA_FUNCTION_NAME}")
+  fi
 
   case "${ACTION:-}" in
-  --up)
-    create_rule
-    ;;
-
-  --down)
-    delete_rule
-    ;;
-
-  --status)
-    rule_status
-    ;;
-
-  --test)
-    test_rule
-    ;;
-
+  --up) create_rule ;;
+  --down) delete_rule ;;
+  --status) rule_status ;;
+  --test) test_rule ;;
   *)
-    msg ERROR "Missing action"
+    msg ERROR "Action required: --up, --down, --status, or --test"
     usage
     ;;
   esac
+
+  local rule_arn
+  rule_arn=$(build_arn events "$AWS_REGION" "${AWS_ACCOUNT_ID:-<account>}" "rule/${RULE_NAME}")
+
+  msg "========================================================================================================="
+  msg INFO "EventBridge Console...https://${AWS_REGION}.console.aws.amazon.com/events/home?region=${AWS_REGION}#/rules"
+  msg INFO "Rule Name.............${RULE_NAME}"
+  msg INFO "Rule ARN..............${rule_arn}"
+  msg INFO "Event Pattern.........${EVENT_PATTERN_FILE}"
+  msg INFO "Region................${AWS_REGION}"
+  msg "========================================================================================================="
 }
 
-# Load scripts
+# ---------------------------------------------------------------------------
+# Bootstrap
+# ---------------------------------------------------------------------------
 if [[ -s "${LIB_DIR}/common" ]]; then
   # shellcheck disable=SC1091
   . "${LIB_DIR}/common"
 else
-  echo "[ERROR] Missing Script: '${LIB_DIR}/common'"
+  echo "[ERROR] Missing: ${LIB_DIR}/common" >&2
   exit 1
 fi
 load_script "${LIB_DIR}/logger"
 
-# Banner
-cat <<EOF
+trap 'msg ERROR "Unexpected error at line $LINENO: $BASH_COMMAND"' ERR
+
+cat <<'BANNER'
 ███████╗██╗   ██╗███████╗███╗   ██╗████████╗    ██████╗ ██████╗ ██╗██████╗  ██████╗ ███████╗     ██████╗████████╗██╗
 ██╔════╝██║   ██║██╔════╝████╗  ██║╚══██╔══╝    ██╔══██╗██╔══██╗██║██╔══██╗██╔════╝ ██╔════╝    ██╔════╝╚══██╔══╝██║
 █████╗  ██║   ██║█████╗  ██╔██╗ ██║   ██║       ██████╔╝██████╔╝██║██║  ██║██║  ███╗█████╗      ██║        ██║   ██║
 ██╔══╝  ╚██╗ ██╔╝██╔══╝  ██║╚██╗██║   ██║       ██╔══██╗██╔══██╗██║██║  ██║██║   ██║██╔══╝      ██║        ██║   ██║
 ███████╗ ╚████╔╝ ███████╗██║ ╚████║   ██║       ██████╔╝██║  ██║██║██████╔╝╚██████╔╝███████╗    ╚██████╗   ██║   ███████╗
 ╚══════╝  ╚═══╝  ╚══════╝╚═╝  ╚═══╝   ╚═╝       ╚═════╝ ╚═╝  ╚═╝╚═╝╚═════╝  ╚═════╝ ╚══════╝     ╚═════╝   ╚═╝   ╚══════╝
-EOF
+BANNER
 
 main "$@"
