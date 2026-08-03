@@ -1,0 +1,570 @@
+#!/usr/bin/env bash
+# =========================================
+# FILE
+#   lambda/src/lambda_ctl
+#
+# SYNOPSIS
+#   AWS Lambda function lifecycle management for IAM monitoring.
+#
+# DESCRIPTION
+#   Packages, provisions, configures, tests, and removes the AWS Lambda
+#   monitoring function, its IAM execution role and policy, its S3 audit
+#   history bucket, and delegates SNS topic management to sns_ctl.
+#
+#   Lifecycle operations:
+#     --up      Create the SNS alert topic via sns_ctl, create the S3 audit bucket,
+#               create/update the IAM execution policy and role via policy_ctl/role_ctl,
+#               package lambda_function.py into a zip at root level, deploy/update
+#               the Lambda function (idempotent; SHA-256 hash comparison),
+#               and configure CloudWatch Log Group retention.
+#     --down    Delete the Lambda function, delete the execution role and policy,
+#               delete the SNS topic via sns_ctl, and delete the S3 audit bucket.
+#     --status  Report state, configuration, and code hash of the function.
+#     --test    Run all test scripts in lambda/test/.
+#
+# USAGE
+#   ./lambda_ctl --up   --aws-account-id <id> --aws-region <region> [OPTIONS]
+#   ./lambda_ctl --down --aws-account-id <id> --aws-region <region> [OPTIONS]
+#   ./lambda_ctl --status --aws-region <region> [OPTIONS]
+#   ./lambda_ctl --test [OPTIONS]
+#
+# OPTIONS
+#   --up | --down | --status | --test   Lifecycle action (required).
+#   --aws-account-id <id>               AWS account ID (required for --up/--down).
+#   --aws-region   <region>             AWS region (required).
+#   --function-name <name>              Lambda function name (default: aws-iam-monitor-lambda).
+#   --role-name     <name>              IAM role name (default: aws-iam-monitor-lambda-role).
+#   --policy-name   <name>              IAM policy name (default: LambdaExecutionPolicy).
+#   --audit-bucket  <name>              S3 audit bucket name.
+#                                       Default: aws-iam-monitor-history-<account>-<region>
+#   --sns-topic-name <name>             SNS topic name (default: iam-alerts).
+#   -v, --verbose                       Enable verbose execution logs.
+#   -h, --help                          Show this help message.
+#
+# EXAMPLES
+#   Create Lambda environment:
+#     ./lambda_ctl --up \
+#       --aws-account-id 123456789012 \
+#       --aws-region us-east-1
+#
+#   Check function status:
+#     ./lambda_ctl --status --aws-region us-east-1
+#
+#   Run test suite:
+#     ./lambda_ctl --test
+#
+#   Delete Lambda environment:
+#     ./lambda_ctl --down \
+#       --aws-account-id 123456789012 \
+#       --aws-region us-east-1
+#
+# DEPENDENCIES
+#   AWS CLI v2, zip, openssl, policy_ctl, role_ctl, sns_ctl
+#
+# REQUIRED IAM PERMISSIONS
+#   lambda:*              iam:*                 sns:*                 s3:*
+#   logs:CreateLogGroup   logs:PutRetentionPolicy
+#
+# EXIT CODES
+#   0   Success
+#   1   Error
+#
+# NOTES
+#   Project     : aws-iam-monitor
+#   Version     : 2.0
+#   Author      : @ZouariOmar (zouariomar20@gmail.com)
+#   Created     : 20/07/2026
+#   Updated     : 03/08/2026
+#
+# shellcheck disable=SC1090,SC1091
+# =========================================
+set -Eeuo pipefail
+
+#####################
+### CONFIGURATION ###
+#####################
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+LIB_DIR="${LIB_DIR:-${SCRIPT_DIR}/../../lib}"
+
+LAMBDA_DIR="${SCRIPT_DIR}/.."
+LAMBDA_POLICY_DIR="${LAMBDA_DIR}/policies"
+LAMBDA_BUILD_DIR="${LAMBDA_DIR}/build"
+LAMBDA_TEST_DIR="${LAMBDA_DIR}/test"
+LAMBDA_SRC_FILE="${SCRIPT_DIR}/lambda_function.py"
+LAMBDA_ZIP_FILE="${LAMBDA_BUILD_DIR}/lambda.zip"
+LAMBDA_TRUST_POLICY="${LAMBDA_POLICY_DIR}/lambda-trust-policy.json"
+
+# External sub-scripts
+POLICY_MANAGEMENT_SCRIPT="${SCRIPT_DIR}/../../iam/src/policy_ctl"
+ROLE_MANAGEMENT_SCRIPT="${SCRIPT_DIR}/../../iam/src/role_ctl"
+SNS_MANAGEMENT_SCRIPT="${SCRIPT_DIR}/../../sns/src/sns_ctl"
+
+# Defaults
+AWS_ACCOUNT_ID="${AWS_ACCOUNT_ID:-}"
+AWS_REGION="${AWS_REGION:-}"
+LAMBDA_FUNCTION_NAME="${LAMBDA_FUNCTION_NAME:-aws-iam-monitor-lambda}"
+LAMBDA_ROLE_NAME="${LAMBDA_ROLE_NAME:-aws-iam-monitor-lambda-role}"
+LAMBDA_POLICY_NAME="${LAMBDA_POLICY_NAME:-LambdaExecutionPolicy}"
+LAMBDA_HANDLER="lambda_function.lambda_handler"
+LAMBDA_RUNTIME="python3.11"
+SNS_TOPIC_NAME="${SNS_TOPIC_NAME:-iam-alerts}"
+AUDIT_BUCKET=""
+SNS_TOPIC_ARN=""
+ACTION=""
+VERBOSE="${VERBOSE:-false}"
+
+######################
+### !CONFIGURATION ###
+######################
+
+usage() {
+  cat <<EOF
+$(msg "USAGE:")
+
+  $(basename "$0") <--up|--down|--status|--test> --aws-region <region> [OPTIONS]
+
+
+$(msg "ACTIONS:")
+
+  --up
+      Create SNS topic via sns_ctl, audit S3 bucket, IAM execution role, package Lambda code,
+      deploy function, and set CloudWatch log retention.
+
+  --down
+      Delete Lambda function, IAM role, SNS topic via sns_ctl, and audit S3 bucket.
+
+  --status
+      Display Lambda function status, configuration, and code hash.
+
+  --test
+      Run all automated tests in lambda/test/.
+
+
+$(msg "OPTIONS:")
+
+  --aws-account-id <id>    AWS account ID (required for --up/--down).
+  --aws-region   <region>  AWS region (required).
+  --function-name <name>   Lambda function name (default: aws-iam-monitor-lambda).
+  --role-name     <name>   IAM role name (default: aws-iam-monitor-lambda-role).
+  --policy-name   <name>   IAM policy name (default: LambdaExecutionPolicy).
+  --audit-bucket  <name>   Audit S3 bucket name.
+  --sns-topic-name <name>  SNS topic name (default: iam-alerts).
+  -v, --verbose            Enable verbose execution output.
+  -h, --help               Show this help message.
+
+
+$(msg "EXAMPLES:")
+
+  Create Lambda:
+    $(basename "$0") --up --aws-account-id 123456789012 --aws-region us-east-1
+
+  Check status:
+    $(basename "$0") --status --aws-region us-east-1
+
+  Run tests:
+    $(basename "$0") --test
+
+  Delete Lambda:
+    $(basename "$0") --down --aws-account-id 123456789012 --aws-region us-east-1
+EOF
+  exit 1
+}
+
+# ---------------------------------------------------------------------------
+# create_audit_bucket
+# ---------------------------------------------------------------------------
+create_audit_bucket() {
+  msg INFO "Configuring audit S3 bucket: $AUDIT_BUCKET"
+
+  if aws s3api head-bucket --bucket "$AUDIT_BUCKET" &>/dev/null; then
+    msg INFO "Audit bucket already exists: $AUDIT_BUCKET"
+  else
+    msg INFO "Creating audit bucket..."
+
+    if [[ "$AWS_REGION" == "us-east-1" ]]; then
+      aws s3api create-bucket \
+        --bucket "$AUDIT_BUCKET" \
+        --region "$AWS_REGION" >/dev/null
+    else
+      aws s3api create-bucket \
+        --bucket "$AUDIT_BUCKET" \
+        --region "$AWS_REGION" \
+        --create-bucket-configuration "LocationConstraint=${AWS_REGION}" >/dev/null
+    fi
+
+    msg SUCCESS "Audit S3 bucket created: $AUDIT_BUCKET"
+  fi
+
+  # Enable default server-side encryption
+  aws s3api put-bucket-encryption \
+    --bucket "$AUDIT_BUCKET" \
+    --server-side-encryption-configuration \
+    '{"Rules":[{"ApplyServerSideEncryptionByDefault":{"SSEAlgorithm":"AES256"}}]}' >/dev/null 2>&1 || true
+}
+
+# ---------------------------------------------------------------------------
+# package_lambda
+# ---------------------------------------------------------------------------
+package_lambda() {
+  msg INFO "Packaging Lambda source..."
+
+  mkdir -p "$LAMBDA_BUILD_DIR"
+  rm -f "$LAMBDA_ZIP_FILE"
+
+  if [[ ! -f "$LAMBDA_SRC_FILE" ]]; then
+    msg ERROR "Lambda source file missing: $LAMBDA_SRC_FILE"
+    exit 1
+  fi
+
+  # Package zip directly from source directory so lambda_function.py is at zip root.
+  (
+    cd "${SCRIPT_DIR}"
+    zip -q "$LAMBDA_ZIP_FILE" "lambda_function.py"
+  )
+
+  msg SUCCESS "Lambda package built: $LAMBDA_ZIP_FILE"
+}
+
+# ---------------------------------------------------------------------------
+# create_lambda
+# ---------------------------------------------------------------------------
+create_lambda() {
+  package_lambda
+
+  local local_hash
+  local_hash=$(openssl dgst -sha256 -binary "$LAMBDA_ZIP_FILE" | openssl base64)
+
+  local role_arn
+  role_arn=$(build_arn iam "" "$AWS_ACCOUNT_ID" "role/${LAMBDA_ROLE_NAME}")
+
+  local env_vars="Variables={AUDIT_BUCKET=${AUDIT_BUCKET},SNS_TOPIC_ARN=${SNS_TOPIC_ARN}}"
+
+  msg INFO "Checking Lambda function state..."
+
+  if aws lambda get-function --function-name "$LAMBDA_FUNCTION_NAME" --region "$AWS_REGION" &>/dev/null; then
+    msg INFO "Lambda function exists: $LAMBDA_FUNCTION_NAME"
+
+    # Wait until Lambda is in Active state before updating.
+    wait_lambda_active "$LAMBDA_FUNCTION_NAME" 30 2
+
+    local remote_hash
+    remote_hash=$(aws lambda get-function \
+      --function-name "$LAMBDA_FUNCTION_NAME" \
+      --region "$AWS_REGION" \
+      --query 'Configuration.CodeSha256' \
+      --output text 2>/dev/null || echo "")
+
+    msg INFO "Updating Lambda configuration..."
+    aws lambda update-function-configuration \
+      --function-name "$LAMBDA_FUNCTION_NAME" \
+      --runtime "$LAMBDA_RUNTIME" \
+      --handler "$LAMBDA_HANDLER" \
+      --role "$role_arn" \
+      --timeout 15 \
+      --environment "$env_vars" \
+      --region "$AWS_REGION" >/dev/null
+
+    msg SUCCESS "Lambda configuration updated"
+
+    if [[ "$local_hash" == "$remote_hash" ]]; then
+      msg INFO "Lambda code is already up to date (SHA-256 match)"
+      return 0
+    fi
+
+    # Wait until configuration update settles.
+    wait_lambda_active "$LAMBDA_FUNCTION_NAME" 30 2
+
+    msg INFO "Updating Lambda code..."
+    aws lambda update-function-code \
+      --function-name "$LAMBDA_FUNCTION_NAME" \
+      --zip-file "fileb://${LAMBDA_ZIP_FILE}" \
+      --region "$AWS_REGION" >/dev/null
+
+    msg SUCCESS "Lambda code updated successfully"
+  else
+    msg INFO "Lambda does not exist. Creating function..."
+
+    local err
+    if ! err=$(aws lambda create-function \
+      --function-name "$LAMBDA_FUNCTION_NAME" \
+      --runtime "$LAMBDA_RUNTIME" \
+      --handler "$LAMBDA_HANDLER" \
+      --role "$role_arn" \
+      --timeout 15 \
+      --zip-file "fileb://${LAMBDA_ZIP_FILE}" \
+      --environment "$env_vars" \
+      --region "$AWS_REGION" \
+      --output json 2>&1); then
+      msg ERROR "Failed to create Lambda function '$LAMBDA_FUNCTION_NAME'"
+      [[ "${VERBOSE:-false}" == true ]] && msg DEBUG "$err"
+      exit 1
+    fi
+
+    msg SUCCESS "Lambda function created: $LAMBDA_FUNCTION_NAME"
+  fi
+
+  # Ensure CloudWatch log group exists.
+  local log_group="/aws/lambda/${LAMBDA_FUNCTION_NAME}"
+  aws logs create-log-group --log-group-name "$log_group" --region "$AWS_REGION" 2>/dev/null || true
+  aws logs put-retention-policy --log-group-name "$log_group" --retention-in-days 30 --region "$AWS_REGION" 2>/dev/null || true
+}
+
+# ---------------------------------------------------------------------------
+# delete_lambda
+# ---------------------------------------------------------------------------
+delete_lambda() {
+  msg INFO "Deleting Lambda function: $LAMBDA_FUNCTION_NAME"
+
+  if aws lambda get-function --function-name "$LAMBDA_FUNCTION_NAME" --region "$AWS_REGION" &>/dev/null; then
+    aws lambda delete-function \
+      --function-name "$LAMBDA_FUNCTION_NAME" \
+      --region "$AWS_REGION" >/dev/null
+
+    msg SUCCESS "Lambda function deleted: $LAMBDA_FUNCTION_NAME"
+  else
+    msg INFO "Lambda function does not exist — skipping deletion"
+  fi
+
+  # Delete CloudWatch log group.
+  local log_group="/aws/lambda/${LAMBDA_FUNCTION_NAME}"
+  aws logs delete-log-group --log-group-name "$log_group" --region "$AWS_REGION" 2>/dev/null || true
+
+  # Delete S3 audit bucket.
+  if [[ -n "$AUDIT_BUCKET" ]] && aws s3api head-bucket --bucket "$AUDIT_BUCKET" &>/dev/null; then
+    msg INFO "Deleting audit S3 bucket..."
+    aws s3 rm "s3://${AUDIT_BUCKET}" --recursive >/dev/null 2>&1 || true
+    aws s3api delete-bucket --bucket "$AUDIT_BUCKET" --region "$AWS_REGION" 2>/dev/null || true
+    msg SUCCESS "Audit S3 bucket deleted"
+  fi
+}
+
+# ---------------------------------------------------------------------------
+# lambda_status
+# ---------------------------------------------------------------------------
+lambda_status() {
+  msg INFO "Checking Lambda function status: $LAMBDA_FUNCTION_NAME"
+
+  if ! aws lambda get-function --function-name "$LAMBDA_FUNCTION_NAME" --region "$AWS_REGION" &>/dev/null; then
+    msg WARNING "Lambda function '$LAMBDA_FUNCTION_NAME' does not exist"
+    return 0
+  fi
+
+  msg SUCCESS "Lambda function exists: $LAMBDA_FUNCTION_NAME"
+
+  msg INFO "Function Configuration:"
+  aws lambda get-function-configuration \
+    --function-name "$LAMBDA_FUNCTION_NAME" \
+    --region "$AWS_REGION" \
+    --output json
+
+  msg INFO "Function Code Hash & Location:"
+  aws lambda get-function \
+    --function-name "$LAMBDA_FUNCTION_NAME" \
+    --region "$AWS_REGION" \
+    --query '{CodeSha256: Configuration.CodeSha256, State: Configuration.State, LastUpdateStatus: Configuration.LastUpdateStatus}' \
+    --output json
+}
+
+# ---------------------------------------------------------------------------
+# test_lambda
+# ---------------------------------------------------------------------------
+test_lambda() {
+  msg INFO "Running Lambda test suite..."
+
+  if [[ ! -d "$LAMBDA_TEST_DIR" ]]; then
+    msg ERROR "Test directory not found: $LAMBDA_TEST_DIR"
+    return 1
+  fi
+
+  local test_files
+  test_files=$(find "$LAMBDA_TEST_DIR" -maxdepth 1 -type f | sort)
+
+  if [[ -z "$test_files" ]]; then
+    msg WARNING "No tests found in $LAMBDA_TEST_DIR"
+    return 0
+  fi
+
+  local failed=0
+  local test_file
+
+  while IFS= read -r test_file; do
+    [[ -z "$test_file" ]] && continue
+
+    if [[ ! -x "$test_file" ]]; then
+      msg WARNING "Skipping non-executable test: $test_file"
+      continue
+    fi
+
+    msg INFO "Running test: $(basename "$test_file")"
+
+    if "$test_file"; then
+      msg SUCCESS "Passed: $(basename "$test_file")"
+    else
+      msg ERROR "Failed: $(basename "$test_file")"
+      failed=$((failed + 1))
+    fi
+
+  done <<<"$test_files"
+
+  if [[ "$failed" -gt 0 ]]; then
+    msg ERROR "$failed Lambda test(s) failed"
+    return 1
+  fi
+
+  msg SUCCESS "All Lambda tests passed"
+}
+
+# ---------------------------------------------------------------------------
+# main
+# ---------------------------------------------------------------------------
+main() {
+  while [[ $# -gt 0 ]]; do
+    case "$1" in
+    --up | --down | --status | --test)
+      ACTION="$1"
+      shift
+      ;;
+    --aws-account-id)
+      AWS_ACCOUNT_ID="$2"
+      shift 2
+      ;;
+    --aws-region)
+      AWS_REGION="$2"
+      shift 2
+      ;;
+    --function-name)
+      LAMBDA_FUNCTION_NAME="$2"
+      shift 2
+      ;;
+    --role-name)
+      LAMBDA_ROLE_NAME="$2"
+      shift 2
+      ;;
+    --policy-name)
+      LAMBDA_POLICY_NAME="$2"
+      shift 2
+      ;;
+    --audit-bucket)
+      AUDIT_BUCKET="$2"
+      shift 2
+      ;;
+    --sns-topic-name)
+      SNS_TOPIC_NAME="$2"
+      shift 2
+      ;;
+    -v | --verbose)
+      VERBOSE=true
+      shift
+      ;;
+    -h | --help)
+      usage
+      ;;
+    *)
+      msg ERROR "Unknown option: $1"
+      usage
+      ;;
+    esac
+  done
+
+  require_variable AWS_REGION
+
+  AUDIT_BUCKET="${AUDIT_BUCKET:-aws-iam-monitor-history-${AWS_ACCOUNT_ID:-000000000000}-${AWS_REGION}}"
+  SNS_TOPIC_ARN="${SNS_TOPIC_ARN:-arn:aws:sns:${AWS_REGION}:${AWS_ACCOUNT_ID:-000000000000}:${SNS_TOPIC_NAME}}"
+
+  local args=()
+  [[ "${VERBOSE:-false}" == true ]] && args+=(--verbose)
+
+  # Provision / Teardown SNS Topic via sns_ctl
+  if [[ "${ACTION:-}" == "--up" || "${ACTION:-}" == "--down" ]]; then
+    require_variable AWS_ACCOUNT_ID
+
+    msg INFO "Managing SNS topic via sns_ctl ($ACTION)..."
+    run_script "$SNS_MANAGEMENT_SCRIPT" "$ACTION" \
+      --aws-account-id "$AWS_ACCOUNT_ID" \
+      --aws-region "$AWS_REGION" \
+      --topic-name "$SNS_TOPIC_NAME" \
+      "${args[@]}"
+
+    msg INFO "Managing Lambda IAM policy and role ($ACTION)..."
+
+    run_script "$POLICY_MANAGEMENT_SCRIPT" "$ACTION" \
+      --policy-name "$LAMBDA_POLICY_NAME" \
+      --policy-dir "$LAMBDA_POLICY_DIR" \
+      --aws-account-id "$AWS_ACCOUNT_ID" \
+      "${args[@]}"
+
+    local role_args=("${args[@]}")
+    if [[ "$ACTION" == "--up" ]]; then
+      role_args+=(
+        --policy-name "$LAMBDA_POLICY_NAME"
+        --trust-policy "$LAMBDA_TRUST_POLICY"
+      )
+    fi
+
+    run_script "$ROLE_MANAGEMENT_SCRIPT" "$ACTION" \
+      --role-name "$LAMBDA_ROLE_NAME" \
+      --aws-account-id "$AWS_ACCOUNT_ID" \
+      "${role_args[@]}"
+  fi
+
+  case "${ACTION:-}" in
+  --up)
+    create_audit_bucket
+    create_lambda
+    ;;
+  --down)
+    delete_lambda
+    ;;
+  --status)
+    lambda_status
+    ;;
+  --test)
+    test_lambda
+    ;;
+  *)
+    msg ERROR "Action required: --up, --down, --status, or --test"
+    usage
+    ;;
+  esac
+
+  local fn_arn
+  fn_arn=$(build_arn lambda "$AWS_REGION" "${AWS_ACCOUNT_ID:-<account>}" "function:${LAMBDA_FUNCTION_NAME}")
+
+  msg "========================================================================================================="
+  msg INFO "Lambda Console.......https://${AWS_REGION}.console.aws.amazon.com/lambda/home?region=${AWS_REGION}#/functions/${LAMBDA_FUNCTION_NAME}"
+  msg INFO "Function Name........${LAMBDA_FUNCTION_NAME}"
+  msg INFO "Function ARN.........${fn_arn}"
+  msg INFO "Audit Bucket.........${AUDIT_BUCKET}"
+  msg INFO "SNS Topic............${SNS_TOPIC_ARN}"
+  msg INFO "Region...............${AWS_REGION}"
+  msg "========================================================================================================="
+}
+
+# ---------------------------------------------------------------------------
+# Bootstrap
+# ---------------------------------------------------------------------------
+if [[ -s "${LIB_DIR}/common" ]]; then
+  # shellcheck disable=SC1091
+  . "${LIB_DIR}/common"
+else
+  echo "[ERROR] Missing: ${LIB_DIR}/common" >&2
+  exit 1
+fi
+load_script "${LIB_DIR}/logger"
+
+# Load optional .env configuration
+load_env_if_exists "${SCRIPT_DIR}/../../.env"
+
+trap 'msg ERROR "Unexpected error at line $LINENO: $BASH_COMMAND"' ERR
+
+cat <<'BANNER'
+██╗      █████╗ ███╗   ███╗██████╗ ██████╗  █████╗      ██████╗████████╗██╗
+██║     ██╔══██╗████╗ ████║██╔══██╗██╔══██╗██╔══██╗    ██╔════╝╚══██╔══╝██║
+██║     ███████║██╔████╔██║██████╔╝██║  ██║███████║    ██║        ██║   ██║
+██║     ██╔══██║██║╚██╔╝██║██╔══██╗██║  ██║██╔══██║    ██║        ██║   ██║
+███████╗██║  ██║██║ ╚═╝ ██║██████╔╝██████╔╝██║  ██║    ╚██████╗   ██║   ███████╗
+╚══════╝╚═╝  ╚═╝╚═╝     ╚═╝╚═════╝ ╚═════╝ ╚═╝  ╚═╝     ╚═════╝   ╚═╝   ╚══════╝
+BANNER
+
+main "$@"
