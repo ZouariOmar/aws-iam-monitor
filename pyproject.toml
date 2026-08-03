@@ -39,6 +39,7 @@ classifiers = [
 ]
 
 dependencies = [
+    "boto3>=1.43.59",
 ]
 
 [dependency-groups]

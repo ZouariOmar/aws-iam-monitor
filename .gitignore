@@ -5,6 +5,7 @@
 ### CUSTOM IGNORES ###
 *.venv/
 */.env*
-*/build/
+build/
 *.egg-info/
 *.lock
+__pycache__

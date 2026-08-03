@@ -1,17 +1,17 @@
 #!/usr/bin/env bash
 # =========================================
 # FILE
-#   event-bridge/test/rule_exists
+#   sns/test/topic_exists
 #
 # SYNOPSIS
-#   Test script to verify EventBridge rule existence.
+#   Test script to verify SNS topic existence.
 # =========================================
 set -Eeuo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 LIB_DIR="${LIB_DIR:-${SCRIPT_DIR}/../../lib}"
 
-RULE_NAME="${RULE_NAME:-aws-iam-monitor-rule}"
+TOPIC_NAME="${SNS_TOPIC_NAME:-iam-alerts}"
 AWS_REGION="${AWS_REGION:-$(aws configure get region 2>/dev/null || echo 'us-east-1')}"
 
 if [[ -s "${LIB_DIR}/common" ]]; then
@@ -23,10 +23,15 @@ else
 fi
 load_script "${LIB_DIR}/logger"
 
-if aws events describe-rule --name "$RULE_NAME" --region "$AWS_REGION" &>/dev/null; then
-  msg SUCCESS "EventBridge rule exists: ${RULE_NAME}"
+topic_arn=$(aws sns list-topics \
+  --region "$AWS_REGION" \
+  --query "Topics[?contains(TopicArn, ':${TOPIC_NAME}')].TopicArn" \
+  --output text 2>/dev/null | head -n1 || echo "")
+
+if [[ -n "$topic_arn" ]]; then
+  msg SUCCESS "SNS topic exists: ${topic_arn}"
   exit 0
 fi
 
-msg ERROR "EventBridge rule does not exist: ${RULE_NAME}"
+msg ERROR "SNS topic does not exist: ${TOPIC_NAME}"
 exit 1

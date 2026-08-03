@@ -1,57 +1,60 @@
 #!/usr/bin/env bash
 # =========================================
-# .FILE
-#   requirements
+# FILE
+#   lib/requirements
 #
-# .SYNOPSIS
-#   Environment validation utilities
+# SYNOPSIS
+#   Prerequisite validation for aws-iam-monitor scripts.
 #
-# .DESCRIPTION
-#   Checks required system commands and validates
-#   the local environment before running AWS IAM
-#   automation scripts.
+# DESCRIPTION
+#   Checks that required system commands are present
+#   before any AWS operations are attempted.
 #
-# .PARAMETER command
-#   Command name to verify installation.
+#   check_command    Silently verify a single command is installed.
+#   check_requirements
+#                    Verify a list of commands; exit on first missing.
 #
-# .INPUTS
-#   List of required commands.
+# USAGE
+#   source lib/requirements
+#   check_requirements aws jq zip openssl
 #
-# .OUTPUTS
-#   Displays validation status messages.
-#   Exits with error if requirements are missing.
-#
-# .NOTES
-#   Project       : aws-iam-monitor
-#   Version       : 1.0
-#   Author        : @ZouariOmar (zouariomar20@gmail.com)
-#   Created       : 08/07/2026
-#   Change Log    : 1.0 Initial release
-#
-# .EXAMPLE
-#   source lib/requirements.sh
-#
-#   check_requirements aws python
+# NOTES
+#   Project     : aws-iam-monitor
+#   Version     : 2.0
+#   Author      : @ZouariOmar (zouariomar20@gmail.com)
+#   Created     : 08/07/2026
+#   Updated     : 03/08/2026
 # =========================================
 set -Eeuo pipefail
 
+# ---------------------------------------------------------------------------
+# check_command COMMAND
+#
+# Returns 0 if COMMAND is on PATH; exits 1 with an error message if not.
+# ---------------------------------------------------------------------------
 check_command() {
-  local CMD="$1"
+  local cmd="$1"
 
-  if command -v "$CMD" >/dev/null 2>&1; then
-    msg SUCCESS "'$CMD' is installed"
-  else
-    msg ERROR "'$CMD' is not installed"
+  if ! command -v "$cmd" &>/dev/null; then
+    msg ERROR "Required command not found: '$cmd'"
+    msg INFO "Install '$cmd' and re-run"
     exit 1
   fi
 }
 
+# ---------------------------------------------------------------------------
+# check_requirements COMMAND [COMMAND...]
+#
+# Verify that every listed command is available.
+# Exits on the first missing dependency.
+# ---------------------------------------------------------------------------
 check_requirements() {
-  msg INFO "Checking required commands..."
+  msg INFO "Checking prerequisites..."
 
-  for CMD in "$@"; do
-    check_command "$CMD"
+  local cmd
+  for cmd in "$@"; do
+    check_command "$cmd"
   done
 
-  msg SUCCESS "All required commands are available!"
+  msg SUCCESS "All prerequisites satisfied: $*"
 }

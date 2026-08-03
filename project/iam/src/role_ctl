@@ -1,123 +1,74 @@
 #!/usr/bin/env bash
 # =========================================
-# .FILE
-#   role_ctl
+# FILE
+#   iam/src/role_ctl
 #
-# .SYNOPSIS
-#   AWS IAM role lifecycle management script
+# SYNOPSIS
+#   AWS IAM role lifecycle management.
 #
-# .DESCRIPTION
-#   Creates and removes AWS IAM roles with
-#   managed policy attachments.
+# DESCRIPTION
+#   Creates and deletes AWS IAM roles with managed policy
+#   attachments and trust policy configuration.
 #
-#   IAM roles provide temporary credentials that
-#   can be assumed by AWS services, applications,
-#   users, or external identity providers.
+#   Lifecycle operations:
+#     --up    Create the role (idempotent) and attach a managed
+#             policy. Trust policy is read from a JSON file;
+#             {{AWS_ACCOUNT_ID}} placeholders are substituted.
+#     --down  Detach all managed policies, remove all inline
+#             policies, remove instance profile associations,
+#             then delete the role.
 #
-#   Supported lifecycle operations:
-#       - Create IAM roles
-#       - Configure trust policies
-#       - Attach managed policies
-#       - Detach managed policies
-#       - Remove inline policies
-#       - Remove instance profile associations
-#       - Delete IAM roles
+# USAGE
+#   ./role_ctl --up   --role-name <name> --policy-name <name> \
+#                     --trust-policy <file> --aws-account-id <id>
+#   ./role_ctl --down --role-name <name> --aws-account-id <id>
 #
-#   Roles follow AWS IAM best practices by using
-#   temporary credentials instead of long-lived
-#   IAM user credentials.
+# OPTIONS
+#   --up | --down              Lifecycle action (required).
+#   --role-name     <name>     IAM role name (required).
+#   --policy-name   <name>     Managed policy name to attach (--up only).
+#   --trust-policy  <path>     Absolute path to trust policy JSON.
+#                              Supports {{AWS_ACCOUNT_ID}} placeholder.
+#   --aws-account-id <id>      AWS account ID (required).
+#   -v, --verbose              Enable verbose output.
+#   -h, --help                 Show this help.
 #
-#   This script is part of aws-iam-monitor,
-#   a real-time AWS IAM auditing and monitoring
-#   project.
-#
-# .INPUTS
-#   Command line arguments:
-#
-#   --up
-#       Create an IAM role and attach a managed
-#       policy.
-#
-#   --down
-#       Remove role dependencies and delete the
-#       IAM role.
-#
-#   --role <role>
-#       IAM role name.
-#
-#   --policy <policy>
-#       IAM managed policy name.
-#
-#   -v, --verbose
-#       Enable verbose execution logs.
-#
-# .OUTPUTS
-#   Creates or deletes IAM roles.
-#
-#   Manages IAM role policy attachments.
-#
-#   Outputs lifecycle logs to stdout.
-#
-# .NOTES
-#   Project       : aws-iam-monitor
-#   Version       : 1.0
-#   Author        : @ZouariOmar (zouariomar20@gmail.com)
-#   Created       : 20/07/2026
-#   Change Log    : 1.0 Initial release
-#
-# .EXAMPLE
-#
+# EXAMPLES
 #   Create a role:
-#
-#       ./role_ctl \
-#           --up \
-#           --role EC2-AppRole \
-#           --policy DeveloperPolicy
+#     ./role_ctl --up \
+#       --role-name    EC2-AppRole \
+#       --policy-name  DevPolicy \
+#       --trust-policy /abs/path/to/iam-trust-policy.json \
+#       --aws-account-id 123456789012
 #
 #   Delete a role:
+#     ./role_ctl --down \
+#       --role-name EC2-AppRole \
+#       --aws-account-id 123456789012
 #
-#       ./role_ctl \
-#           --down \
-#           --role EC2-AppRole
+# DEPENDENCIES
+#   AWS CLI v2, sed
 #
-#   Enable verbose mode:
+# REQUIRED IAM PERMISSIONS
+#   iam:CreateRole                iam:GetRole
+#   iam:DeleteRole                iam:AttachRolePolicy
+#   iam:DetachRolePolicy          iam:ListAttachedRolePolicies
+#   iam:DeleteRolePolicy          iam:ListRolePolicies
+#   iam:ListInstanceProfilesForRole
+#   iam:RemoveRoleFromInstanceProfile
 #
-#       ./role_ctl \
-#           --up \
-#           --role EC2-AppRole \
-#           --policy DeveloperPolicy \
-#           --verbose
+# EXIT CODES
+#   0   Success
+#   1   Error
 #
-# .REQUIREMENTS
-#   - AWS CLI v2
-#   - Configured AWS credentials
-#   - Trust policy JSON file
-#   - Shared project libraries:
-#       lib/common
-#       lib/logger
-#       lib/requirements
+# NOTES
+#   Project     : aws-iam-monitor
+#   Version     : 2.0
+#   Author      : @ZouariOmar (zouariomar20@gmail.com)
+#   Created     : 20/07/2026
+#   Updated     : 03/08/2026
 #
-#   Required IAM permissions:
-#
-#       iam:CreateRole
-#       iam:GetRole
-#       iam:DeleteRole
-#       iam:AttachRolePolicy
-#       iam:DetachRolePolicy
-#       iam:ListAttachedRolePolicies
-#       iam:PutRolePolicy
-#       iam:DeleteRolePolicy
-#       iam:ListRolePolicies
-#       iam:ListInstanceProfilesForRole
-#       iam:RemoveRoleFromInstanceProfile
-#
-# .SECURITY
-#   - Uses temporary credentials through IAM roles.
-#   - Access is governed by trust policies.
-#   - No long-lived IAM user credentials.
-#   - Supports least privilege access management.
-#
-# shellcheck disable=SC1090
+# shellcheck disable=SC1090,SC1091
 # =========================================
 set -Eeuo pipefail
 
@@ -125,17 +76,15 @@ set -Eeuo pipefail
 ### CONFIGURATION ###
 #####################
 
-# Directories
-LIB_DIR="${LIB_DIR:-lib}"
-IAM_DIR="${IAM_DIR:-iam}"
-POLICIES_DIR="${POLICIES_DIR:-${IAM_DIR}/policies}"
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+LIB_DIR="${LIB_DIR:-${SCRIPT_DIR}/../../lib}"
 
-# Files
-TRUST_POLICY_FILE="${POLICIES_DIR}/trust-policy.json"
-
-# Global vars
-VERBOSE=${VERBOSE:-false}
-AWS_ACCOUNT_ID=${AWS_ACCOUNT_ID:-}
+ROLE_NAME=""
+POLICY_NAME=""
+TRUST_POLICY_FILE=""
+AWS_ACCOUNT_ID=""
+ACTION=""
+VERBOSE="${VERBOSE:-false}"
 
 ######################
 ### !CONFIGURATION ###
@@ -145,207 +94,193 @@ usage() {
   cat <<EOF
 $(msg "USAGE:")
 
-  $(basename "$0") --up --role <role> --policy <policy>
+  $(basename "$0") --up   --role-name <name> --policy-name <name> \\
+                          --trust-policy <file> --aws-account-id <id>
 
-  $(basename "$0") --down --role <role>
+  $(basename "$0") --down --role-name <name> --aws-account-id <id>
 
-$(msg "COMMANDS:"):
 
-    --up
-      Create an IAM role and attach a managed policy.
+$(msg "ACTIONS:")
+
+  --up
+      Create the IAM role and attach a managed policy.
+      Idempotent: skips creation if the role already exists.
 
   --down
-      Remove role dependencies and delete the IAM role.
+      Remove all role dependencies then delete the IAM role.
 
 
 $(msg "OPTIONS:")
 
-  --role <role>
-      IAM role name.
-
-  --policy <policy>
-      IAM managed policy name.
-
-  -v, --verbose
-      Enable verbose lifecycle logs.
-
-  -h, --help
-      Show this help message.
+  --role-name    <name>   IAM role name.
+  --policy-name  <name>   Managed policy name to attach (--up only).
+  --trust-policy <path>   Path to trust policy JSON.
+                          Supports {{AWS_ACCOUNT_ID}} placeholder.
+  --aws-account-id <id>   AWS account ID.
+  -v, --verbose           Enable verbose output.
+  -h, --help              Show this help.
 
 
 $(msg "EXAMPLES:")
 
   Create a role:
-
-      $(basename "$0") \
-          --up \
-          --role EC2-AppRole \
-          --policy DeveloperPolicy
-
+    $(basename "$0") --up \\
+      --role-name    EC2-AppRole \\
+      --policy-name  DevPolicy \\
+      --trust-policy /path/to/iam-trust-policy.json \\
+      --aws-account-id 123456789012
 
   Delete a role:
-
-      $(basename "$0") \
-          --down \
-          --role EC2-AppRole
-
-
-  Create with verbose output:
-
-      $(basename "$0") \
-          --up \
-          --role EC2-AppRole \
-          --policy DeveloperPolicy \
-          --verbose
+    $(basename "$0") --down \\
+      --role-name EC2-AppRole \\
+      --aws-account-id 123456789012
 EOF
   exit 1
 }
 
+# ---------------------------------------------------------------------------
+# create_role
+# ---------------------------------------------------------------------------
 create_role() {
-  local ROLE_NAME=$1
-  local POLICY_NAME=$2
-  local POLICY_ARN="arn:aws:iam::${AWS_ACCOUNT_ID}:policy/${POLICY_NAME}"
+  local policy_arn
+  policy_arn=$(build_arn iam "" "$AWS_ACCOUNT_ID" "policy/${POLICY_NAME}")
 
-  if aws iam get-role \
-    --role-name "$ROLE_NAME" >/dev/null 2>&1; then
+  msg INFO "Creating role: $ROLE_NAME"
 
-    msg INFO "Role exists: https://console.aws.amazon.com/iam/home#/roles/${ROLE_NAME}"
-
+  if aws iam get-role --role-name "$ROLE_NAME" &>/dev/null; then
+    msg INFO "Role already exists: $ROLE_NAME"
   else
-    aws iam create-role \
-      --role-name "$ROLE_NAME" \
-      --assume-role-policy-document "$(
-        sed "s/{{AWS_ACCOUNT_ID}}/${AWS_ACCOUNT_ID}/g" "$TRUST_POLICY_FILE"
-      )" >/dev/null
-
-    if [[ "$VERBOSE" == true ]]; then
-      msg SUCCESS "Created Role: https://console.aws.amazon.com/iam/home#/roles/${ROLE_NAME}"
+    if [[ ! -f "$TRUST_POLICY_FILE" ]]; then
+      msg ERROR "Trust policy file not found: $TRUST_POLICY_FILE"
+      exit 1
     fi
+
+    local trust_doc
+    trust_doc=$(sed "s/{{AWS_ACCOUNT_ID}}/${AWS_ACCOUNT_ID}/g" "$TRUST_POLICY_FILE")
+
+    local err
+    if ! err=$(aws iam create-role \
+      --role-name "$ROLE_NAME" \
+      --assume-role-policy-document "$trust_doc" \
+      --output json 2>&1); then
+      msg ERROR "Failed to create role '$ROLE_NAME'"
+      [[ "${VERBOSE:-false}" == true ]] && msg DEBUG "$err"
+      exit 1
+    fi
+
+    msg SUCCESS "Role created: $ROLE_NAME"
   fi
 
-  if ! aws iam list-attached-role-policies \
+  # Attach managed policy if not already attached.
+  local attached
+  attached=$(aws iam list-attached-role-policies \
     --role-name "$ROLE_NAME" \
-    --query "AttachedPolicies[?PolicyArn=='$POLICY_ARN']" \
-    --output text | grep -q "$POLICY_ARN"; then
+    --query "AttachedPolicies[?PolicyArn=='${policy_arn}'].PolicyArn" \
+    --output text 2>/dev/null)
 
-    aws iam attach-role-policy \
+  if [[ -z "$attached" ]]; then
+    local err
+    if ! err=$(aws iam attach-role-policy \
       --role-name "$ROLE_NAME" \
-      --policy-arn "$POLICY_ARN"
-
-    if [[ "$VERBOSE" == true ]]; then
-      msg SUCCESS "Attached policy '$POLICY_NAME' to role '$ROLE_NAME'"
+      --policy-arn "$policy_arn" 2>&1); then
+      msg ERROR "Failed to attach policy '$POLICY_NAME' to role '$ROLE_NAME'"
+      [[ "${VERBOSE:-false}" == true ]] && msg DEBUG "$err"
+      exit 1
     fi
+    msg SUCCESS "Attached policy '$POLICY_NAME' to role '$ROLE_NAME'"
+  else
+    msg INFO "Policy '$POLICY_NAME' already attached to role '$ROLE_NAME'"
   fi
 }
 
+# ---------------------------------------------------------------------------
+# delete_role
+# ---------------------------------------------------------------------------
 delete_role() {
-  local ROLE_NAME=$1
+  msg INFO "Deleting role: $ROLE_NAME"
 
-  if ! aws iam get-role \
-    --role-name "$ROLE_NAME" >/dev/null 2>&1; then
-    msg INFO "Role '$ROLE_NAME' does not exist."
-    return
+  if ! aws iam get-role --role-name "$ROLE_NAME" &>/dev/null; then
+    msg INFO "Role '$ROLE_NAME' does not exist — nothing to delete"
+    return 0
   fi
 
-  # Remove attached managed policies
-  while read -r POLICY_ARN; do
-    [[ -z "$POLICY_ARN" ]] && continue
-
+  # Remove attached managed policies.
+  while IFS= read -r policy_arn; do
+    [[ -z "$policy_arn" ]] && continue
     aws iam detach-role-policy \
       --role-name "$ROLE_NAME" \
-      --policy-arn "$POLICY_ARN"
+      --policy-arn "$policy_arn"
+    [[ "${VERBOSE:-false}" == true ]] && msg DEBUG "Detached: $policy_arn"
+  done < <(aws iam list-attached-role-policies \
+    --role-name "$ROLE_NAME" \
+    --query 'AttachedPolicies[].PolicyArn' \
+    --output text 2>/dev/null |
+    tr '\t' '\n')
 
-    if [[ "$VERBOSE" == true ]]; then
-      msg INFO "Detached role policy: $POLICY_ARN"
-    fi
-
-  done < <(
-    aws iam list-attached-role-policies \
-      --role-name "$ROLE_NAME" \
-      --query 'AttachedPolicies[].PolicyArn' \
-      --output text | tr '\t' '\n'
-  )
-
-  # Remove inline policies
-  while read -r POLICY_NAME; do
-    [[ -z "$POLICY_NAME" ]] && continue
-
+  # Remove inline policies.
+  while IFS= read -r inline_name; do
+    [[ -z "$inline_name" ]] && continue
     aws iam delete-role-policy \
       --role-name "$ROLE_NAME" \
-      --policy-name "$POLICY_NAME"
+      --policy-name "$inline_name"
+    [[ "${VERBOSE:-false}" == true ]] && msg DEBUG "Removed inline policy: $inline_name"
+  done < <(aws iam list-role-policies \
+    --role-name "$ROLE_NAME" \
+    --query 'PolicyNames[]' \
+    --output text 2>/dev/null |
+    tr '\t' '\n')
 
-    if [[ "$VERBOSE" == true ]]; then
-      msg INFO "Deleted inline policy: $POLICY_NAME"
-    fi
-
-  done < <(
-    aws iam list-role-policies \
-      --role-name "$ROLE_NAME" \
-      --query 'PolicyNames[]' \
-      --output text | tr '\t' '\n'
-  )
-
-  # Remove instance profiles
-  while read -r PROFILE; do
-    [[ -z "$PROFILE" ]] && continue
-
+  # Remove instance profile associations.
+  while IFS= read -r profile; do
+    [[ -z "$profile" ]] && continue
     aws iam remove-role-from-instance-profile \
-      --instance-profile-name "$PROFILE" \
+      --instance-profile-name "$profile" \
       --role-name "$ROLE_NAME"
+    [[ "${VERBOSE:-false}" == true ]] && msg DEBUG "Removed from instance profile: $profile"
+  done < <(aws iam list-instance-profiles-for-role \
+    --role-name "$ROLE_NAME" \
+    --query 'InstanceProfiles[].InstanceProfileName' \
+    --output text 2>/dev/null |
+    tr '\t' '\n')
 
-    if [[ "$VERBOSE" == true ]]; then
-      msg INFO "Removed role from instance profile: $PROFILE"
-    fi
+  aws iam delete-role --role-name "$ROLE_NAME"
 
-  done < <(
-    aws iam list-instance-profiles-for-role \
-      --role-name "$ROLE_NAME" \
-      --query 'InstanceProfiles[].InstanceProfileName' \
-      --output text | tr '\t' '\n'
-  )
-
-  aws iam delete-role \
-    --role-name "$ROLE_NAME"
-
-  if [[ "$VERBOSE" == true ]]; then
-    msg SUCCESS "Deleted role: $ROLE_NAME"
-  fi
+  msg SUCCESS "Role deleted: $ROLE_NAME"
 }
 
+# ---------------------------------------------------------------------------
+# main
+# ---------------------------------------------------------------------------
 main() {
   while [[ $# -gt 0 ]]; do
     case "$1" in
-    --aws-account-id)
-      AWS_ACCOUNT_ID="$2"
-      shift 2
-      ;;
-
-    -v | --verbose)
-      VERBOSE=true
-      shift
-      ;;
-
     --up | --down)
       ACTION="$1"
       shift
       ;;
-
-    --role)
-      ROLE="$2"
-      require_variable ROLE
+    --role-name)
+      ROLE_NAME="$2"
       shift 2
       ;;
-
-    --policy)
-      POLICY="$2"
-      require_variable POLICY
+    --policy-name)
+      POLICY_NAME="$2"
       shift 2
       ;;
-
+    --trust-policy)
+      TRUST_POLICY_FILE="$2"
+      shift 2
+      ;;
+    --aws-account-id)
+      AWS_ACCOUNT_ID="$2"
+      shift 2
+      ;;
+    -v | --verbose)
+      VERBOSE=true
+      shift
+      ;;
     -h | --help)
       usage
       ;;
-
     *)
       msg ERROR "Unknown option: $1"
       usage
@@ -353,33 +288,37 @@ main() {
     esac
   done
 
+  require_variable ROLE_NAME
+  require_variable AWS_ACCOUNT_ID
+
   case "${ACTION:-}" in
   --up)
-    msg INFO "Creating role: $ROLE"
-    msg INFO "Attaching policy: $POLICY"
-    create_role "$ROLE" "$POLICY"
+    require_variable POLICY_NAME
+    require_variable TRUST_POLICY_FILE
+    create_role
     ;;
-
   --down)
-    msg INFO "Deleting role: $ROLE"
-    delete_role "$ROLE"
+    delete_role
     ;;
-
   *)
-    msg ERROR "Missing action (--up/--down)"
+    msg ERROR "Action required: --up or --down"
     usage
     ;;
   esac
 }
 
-# Load scripts
+# ---------------------------------------------------------------------------
+# Bootstrap
+# ---------------------------------------------------------------------------
 if [[ -s "${LIB_DIR}/common" ]]; then
   # shellcheck disable=SC1091
   . "${LIB_DIR}/common"
 else
-  echo "[ERROR] Missing Script: '${LIB_DIR}/common'"
+  echo "[ERROR] Missing: ${LIB_DIR}/common" >&2
   exit 1
 fi
 load_script "${LIB_DIR}/logger"
+
+trap 'msg ERROR "Unexpected error at line $LINENO: $BASH_COMMAND"' ERR
 
 main "$@"

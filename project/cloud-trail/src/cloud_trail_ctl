@@ -1,346 +1,337 @@
 #!/usr/bin/env bash
 # =========================================
-# .FILE
-#   cloud_trail_ctl
+# FILE
+#   cloud-trail/src/cloud_trail_ctl
 #
-# .SYNOPSIS
-#   AWS CloudTrail management automation
-#   script.
+# SYNOPSIS
+#   AWS CloudTrail lifecycle management.
 #
-# .DESCRIPTION
-#   Creates, configures, monitors, and
-#   removes an AWS CloudTrail trail.
+# DESCRIPTION
+#   Creates, configures, monitors, and removes an AWS CloudTrail
+#   trail for monitoring IAM API activity across an AWS account.
 #
-#   The script:
-#     - Creates a CloudTrail trail
-#     - Configures management event logging
-#     - Starts CloudTrail logging
-#     - Displays trail status
-#     - Stops CloudTrail logging
-#     - Deletes the CloudTrail trail
+#   Delegates S3 log bucket provisioning and cleanup to s3_bucket_ctl.
 #
-#   S3 bucket provisioning is delegated
-#   to the s3_bucket_ctl script.
+#   Lifecycle operations:
+#     --up      Provision the S3 log bucket via s3_bucket_ctl,
+#               create the trail (idempotent), configure management
+#               event selectors, and start logging.
+#     --down    Stop trail logging, delete the trail, and delete
+#               the S3 log bucket via s3_bucket_ctl.
+#     --status  Report status of the trail and the S3 log bucket.
 #
-#   Designed for IAM security monitoring
-#   by collecting AWS API activity into
-#   Amazon S3 for further EventBridge and
-#   AWS Lambda processing.
+# USAGE
+#   ./cloud_trail_ctl --up   --aws-account-id <id> --aws-region <region> [OPTIONS]
+#   ./cloud_trail_ctl --down --aws-account-id <id> [OPTIONS]
+#   ./cloud_trail_ctl --status --aws-account-id <id> --aws-region <region> [OPTIONS]
 #
-# .USAGE
-#   ./cloud_trail_ctl [OPTIONS] ACTION
+# OPTIONS
+#   --up | --down | --status            Lifecycle action (required).
+#   --aws-account-id <id>               AWS account ID (required).
+#   --aws-region   <region>             AWS region (required).
+#   --trail-name   <name>               CloudTrail trail name.
+#                                       Default: aws-iam-monitor-management-events
+#   --event-selectors-rw-type <type>    Management event read/write filtering:
+#                                       All (default), ReadOnly, WriteOnly.
+#   --bucket-encryption-sse-algorithm   S3 encryption algorithm (default: AES256).
+#   -v, --verbose                       Enable verbose execution output.
+#   -h, --help                          Show this help.
 #
-# .ACTIONS
-#   --up
-#       Create and configure the
-#       CloudTrail trail.
+# EXAMPLES
+#   Create CloudTrail environment:
+#     ./cloud_trail_ctl --up \
+#       --aws-account-id 123456789012 \
+#       --aws-region us-east-1
 #
-#   --down
-#       Stop logging and delete the
-#       CloudTrail trail.
+#   Check status:
+#     ./cloud_trail_ctl --status \
+#       --aws-account-id 123456789012 \
+#       --aws-region us-east-1
 #
-#   --status
-#       Display CloudTrail trail status.
+#   Delete CloudTrail environment:
+#     ./cloud_trail_ctl --down \
+#       --aws-account-id 123456789012 \
+#       --aws-region us-east-1
 #
-# .OPTIONS
-#   --aws-account-id <id>
-#       AWS account ID.
+# DEPENDENCIES
+#   AWS CLI v2, s3_bucket_ctl, sed
 #
-#   --aws-region <region>
-#       AWS region where the trail
-#       resides.
+# REQUIRED IAM PERMISSIONS
+#   cloudtrail:CreateTrail       cloudtrail:DeleteTrail
+#   cloudtrail:DescribeTrails     cloudtrail:StartLogging
+#   cloudtrail:StopLogging        cloudtrail:GetTrailStatus
+#   cloudtrail:PutEventSelectors cloudtrail:GetEventSelectors
+#   (Plus S3 permissions via s3_bucket_ctl)
 #
-#   --event-selectors-rw-type <type>
-#       Management event read/write mode.
-#       Allowed values:
-#         - All
-#         - ReadOnly
-#         - WriteOnly
+# EXIT CODES
+#   0   Success
+#   1   Error
 #
-#   --bucket-encryption-sse-algorithm <algorithm>
-#       Default S3 bucket server-side
-#       encryption algorithm.
-#       Passed to s3_bucket_ctl.
+# NOTES
+#   Project     : aws-iam-monitor
+#   Version     : 2.0
+#   Author      : @ZouariOmar (zouariomar20@gmail.com)
+#   Created     : 20/07/2026
+#   Updated     : 03/08/2026
 #
-#       Default:
-#         AES256
-#
-#   -v, --verbose
-#       Enable verbose output.
-#
-#   -h, --help
-#       Display this help message.
-#
-# .INPUTS
-#   Command-line arguments.
-#
-# .OUTPUTS
-#   --up:
-#       Configured CloudTrail trail.
-#
-#   --status:
-#       CloudTrail trail status.
-#
-#   --down:
-#       Removed CloudTrail trail.
-#
-# .FILES
-#   policies/cloud-trail/
-#       event-selectors.json
-#
-# .NOTES
-#   Project       : aws-iam-monitor
-#   Version       : 1.0
-#   Author        : @ZouariOmar
-#   Created       : 2026-07-20
-#
-# .REQUIREMENTS
-#   - AWS CLI v2
-#   - Configured AWS credentials
-#   - IAM permissions:
-#       cloudtrail:*
-#       s3:*
+# shellcheck disable=SC1090,SC1091
 # =========================================
 set -Eeuo pipefail
 
 #####################
-### Configuration ###
+### CONFIGURATION ###
 #####################
 
-# Directories
-LIB_DIR="${LIB_DIR:-lib}"
-CLOUD_TRAIL_DIR="${CLOUD_TRAIL_DIR:-cloud-trail}"
-CLOUD_TRAIL_SRC_DIR="${CLOUD_TRAIL_SRC_DIR:-${CLOUD_TRAIL_DIR}/src}"
-CLOUD_TRAIL_POLICIES_DIR="${CLOUD_TRAIL_POLICIES_DIR:-${CLOUD_TRAIL_DIR}/policies}"
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+LIB_DIR="${LIB_DIR:-${SCRIPT_DIR}/../../lib}"
 
-# Scripts
-POLICY_MANAGEMENT_SCRIPT="${POLICY_MANAGEMENT_SCRIPT:-${CLOUD_TRAIL_POLICIES_DIR}/policy_ctl}"
-
-# Scripts
-S3_BUCKET_MANAGEMENT_SCRIPT="${S3_BUCKET_MANAGEMENT_SCRIPT:-${CLOUD_TRAIL_SRC_DIR}/s3_bucket_ctl}"
-
-# Files
+CLOUD_TRAIL_POLICIES_DIR="${SCRIPT_DIR}/../policies"
+S3_BUCKET_CTL="${SCRIPT_DIR}/s3_bucket_ctl"
 TRAIL_EVENT_SELECTORS_FILE="${CLOUD_TRAIL_POLICIES_DIR}/event-selectors.json"
 
-# Global vars
-VERBOSE=${VERBOSE:-false}
-
-# AWS vars
-AWS_ACCOUNT_ID=${AWS_ACCOUNT_ID:-}
-AWS_REGION=${AWS_REGION:-}
-
-# CloudTrail vars
-TRAIL_NAME=${TRAIL_NAME:-"aws-iam-monitor-management-events"}
-TRAIL_EVENT_SELECTOR_READ_WRITE_TYPE=${TRAIL_EVENT_SELECTOR_READ_WRITE_TYPE:-"All"}
-TRAIL_BUCKET_ENCRYPTION_SSE_ALGORITHM=${TRAIL_BUCKET_ENCRYPTION_SSE_ALGORITHM:-"AES256"}
-TRAIL_BUCKET_NAME=${TRAIL_BUCKET_NAME:-}
+# Defaults.
+AWS_ACCOUNT_ID=""
+AWS_REGION=""
+TRAIL_NAME="aws-iam-monitor-management-events"
+TRAIL_EVENT_SELECTOR_READ_WRITE_TYPE="All"
+TRAIL_BUCKET_ENCRYPTION_SSE_ALGORITHM="AES256"
+TRAIL_BUCKET_NAME=""
+ACTION=""
+VERBOSE="${VERBOSE:-false}"
 
 ######################
-### !Configuration ###
+### !CONFIGURATION ###
 ######################
 
 usage() {
   cat <<EOF
 $(msg "USAGE:")
-  $(basename "$0") [OPTIONS] ACTION
+
+  $(basename "$0") <--up|--down|--status> --aws-account-id <id> \\
+                            --aws-region <region> [OPTIONS]
+
 
 $(msg "ACTIONS:")
+
   --up
-      Create and configure the CloudTrail trail.
+      Create S3 bucket, create CloudTrail trail, configure event
+      selectors, and start logging.
 
   --down
-      Stop logging and delete the CloudTrail trail.
+      Stop logging, delete CloudTrail trail, and delete S3 bucket.
 
   --status
-      Display CloudTrail trail status.
+      Display CloudTrail trail status and event selectors.
+
 
 $(msg "OPTIONS:")
-  --aws-account-id <id>
-      AWS account ID.
 
-  --aws-region <region>
-      AWS region where the trail resides.
+  --aws-account-id <id>               AWS account ID.
+  --aws-region   <region>             AWS region.
+  --trail-name   <name>               Trail name (default: aws-iam-monitor-management-events).
+  --event-selectors-rw-type <type>    Read/Write mode: All (default), ReadOnly, WriteOnly.
+  --bucket-encryption-sse-algorithm   SSE algorithm (default: AES256).
+  -v, --verbose                       Enable verbose execution logs.
+  -h, --help                          Show this help message.
 
-  --event-selectors-rw-type <type>
-      Management event read/write mode.
-      Allowed values:
-        - All
-        - ReadOnly
-        - WriteOnly
-
-  --bucket-encryption-sse-algorithm <algorithm>
-      Default S3 bucket server-side
-      encryption algorithm.
-      Passed to s3_bucket_ctl.
-
-      Default:
-        AES256
-
-  -v, --verbose
-      Enable verbose output.
-
-  -h, --help
-      Display this help message.
 
 $(msg "EXAMPLES:")
-  Create a CloudTrail trail:
-    $(basename "$0") \\
-      --aws-account-id 123456789012 \\
-      --aws-region us-east-1 \\
-      --up
 
-  Create a write-only management trail:
-    $(basename "$0") \\
-      --aws-account-id 123456789012 \\
-      --aws-region us-east-1 \\
-      --event-selectors-rw-type WriteOnly \\
-      --up
+  Create trail:
+    $(basename "$0") --up --aws-account-id 123456789012 --aws-region us-east-1
 
-  Show trail status:
-    $(basename "$0") \\
-      --aws-region us-east-1 \\
-      --status
+  Check status:
+    $(basename "$0") --status --aws-account-id 123456789012 --aws-region us-east-1
 
-  Delete the CloudTrail trail:
-    $(basename "$0") \\
-      --aws-region us-east-1 \\
-      --down
+  Delete trail:
+    $(basename "$0") --down --aws-account-id 123456789012 --aws-region us-east-1
 EOF
+  exit 1
 }
 
+# ---------------------------------------------------------------------------
+# create_trail
+# ---------------------------------------------------------------------------
 create_trail() {
-  msg INFO "Creating Trail..."
+  msg INFO "Creating CloudTrail trail: $TRAIL_NAME"
 
-  if aws cloudtrail describe-trails \
-    --trail-name-list "${TRAIL_NAME}" \
-    --query "trailList[0].Name" \
-    --output text | grep -q "${TRAIL_NAME}"; then
-    msg INFO "Trail already exists"
+  # Provision S3 log bucket.
+  local args=()
+  [[ "${VERBOSE:-false}" == true ]] && args+=(--verbose)
 
-  else
-    msg INFO "Creating CloudTrail trail"
+  run_script "$S3_BUCKET_CTL" --up \
+    --aws-account-id "$AWS_ACCOUNT_ID" \
+    --aws-region "$AWS_REGION" \
+    --bucket-name "$TRAIL_BUCKET_NAME" \
+    --bucket-encryption-sse-algorithm "$TRAIL_BUCKET_ENCRYPTION_SSE_ALGORITHM" \
+    "${args[@]}"
 
-    aws cloudtrail create-trail \
-      --name "${TRAIL_NAME}" \
-      --s3-bucket-name "${TRAIL_BUCKET_NAME}" >/dev/null
-
-    msg SUCCESS "CloudTrail trail created successfully"
-  fi
-
-  # Enable Management Events
-  msg INFO "Configuring management events"
-
-  aws cloudtrail put-event-selectors \
-    --trail-name "${TRAIL_NAME}" \
-    --event-selectors "$(
-      sed "s/{{TRAIL_EVENT_SELECTOR_READ_WRITE_TYPE}}/${TRAIL_EVENT_SELECTOR_READ_WRITE_TYPE}/g" \
-        "$TRAIL_EVENT_SELECTORS_FILE"
-    )" >/dev/null
-
-  # Enable Logging
-  msg INFO "Starting CloudTrail logging"
-
-  aws cloudtrail start-logging \
-    --name "${TRAIL_NAME}"
-
-  msg SUCCESS "CloudTrail trail configured successfully"
-}
-
-delete_trail() {
-  msg INFO "Deleting Trail..."
-
-  # Stop logging
-  if aws cloudtrail get-trail-status \
-    --name "${TRAIL_NAME}" >/dev/null 2>&1; then
-
-    msg INFO "Stopping CloudTrail logging"
-
-    aws cloudtrail stop-logging \
-      --name "${TRAIL_NAME}" >/dev/null
-
-    msg SUCCESS "CloudTrail logging stopped"
-
-  else
-    msg INFO "CloudTrail trail does not exist"
-  fi
-
-  # Delete trail
-  if aws cloudtrail describe-trails \
-    --trail-name-list "${TRAIL_NAME}" \
-    --query "trailList[0].Name" \
-    --output text | grep -q "${TRAIL_NAME}"; then
-
-    aws cloudtrail delete-trail \
-      --name "${TRAIL_NAME}" >/dev/null
-
-    msg SUCCESS "CloudTrail trail deleted successfully"
-
-  else
-    msg INFO "CloudTrail trail already deleted"
-  fi
-}
-
-trail_status() {
-  msg INFO "Checking Trail..."
-
-  if ! aws cloudtrail describe-trails \
+  # Check if trail exists.
+  local exists
+  exists=$(aws cloudtrail describe-trails \
     --trail-name-list "$TRAIL_NAME" \
     --region "$AWS_REGION" \
-    --query 'trailList[0].Name' \
-    --output text 2>/dev/null | grep -qx "$TRAIL_NAME"; then
-    msg ERROR "CloudTrail trail '$TRAIL_NAME' does not exist"
-    return
+    --query "trailList[?Name=='${TRAIL_NAME}'].Name" \
+    --output text 2>/dev/null || echo "")
+
+  if [[ -n "$exists" ]]; then
+    msg INFO "CloudTrail trail already exists: $TRAIL_NAME"
+  else
+    local err
+    if ! err=$(aws cloudtrail create-trail \
+      --name "$TRAIL_NAME" \
+      --s3-bucket-name "$TRAIL_BUCKET_NAME" \
+      --region "$AWS_REGION" \
+      --output json 2>&1); then
+      msg ERROR "Failed to create CloudTrail trail '$TRAIL_NAME'"
+      [[ "${VERBOSE:-false}" == true ]] && msg DEBUG "$err"
+      exit 1
+    fi
+
+    msg SUCCESS "CloudTrail trail created: $TRAIL_NAME"
   fi
 
-  msg SUCCESS "Trail exists"
+  # Configure Event Selectors.
+  if [[ -f "$TRAIL_EVENT_SELECTORS_FILE" ]]; then
+    msg INFO "Configuring management event selectors (${TRAIL_EVENT_SELECTOR_READ_WRITE_TYPE})..."
+    local selectors
+    selectors=$(sed "s/{{TRAIL_EVENT_SELECTOR_READ_WRITE_TYPE}}/${TRAIL_EVENT_SELECTOR_READ_WRITE_TYPE}/g" \
+      "$TRAIL_EVENT_SELECTORS_FILE")
+
+    aws cloudtrail put-event-selectors \
+      --trail-name "$TRAIL_NAME" \
+      --region "$AWS_REGION" \
+      --event-selectors "$selectors" >/dev/null
+
+    msg SUCCESS "Event selectors configured"
+  fi
+
+  # Start Logging.
+  msg INFO "Starting CloudTrail logging..."
+  aws cloudtrail start-logging \
+    --name "$TRAIL_NAME" \
+    --region "$AWS_REGION" >/dev/null
+
+  msg SUCCESS "CloudTrail logging started"
+}
+
+# ---------------------------------------------------------------------------
+# delete_trail
+# ---------------------------------------------------------------------------
+delete_trail() {
+  msg INFO "Deleting CloudTrail trail: $TRAIL_NAME"
+
+  local exists
+  exists=$(aws cloudtrail describe-trails \
+    --trail-name-list "$TRAIL_NAME" \
+    --region "$AWS_REGION" \
+    --query "trailList[?Name=='${TRAIL_NAME}'].Name" \
+    --output text 2>/dev/null || echo "")
+
+  if [[ -n "$exists" ]]; then
+    # Stop logging.
+    msg INFO "Stopping CloudTrail logging..."
+    aws cloudtrail stop-logging \
+      --name "$TRAIL_NAME" \
+      --region "$AWS_REGION" >/dev/null 2>&1 || true
+
+    # Delete trail.
+    aws cloudtrail delete-trail \
+      --name "$TRAIL_NAME" \
+      --region "$AWS_REGION" >/dev/null
+
+    msg SUCCESS "CloudTrail trail deleted: $TRAIL_NAME"
+  else
+    msg INFO "CloudTrail trail does not exist — skipping trail deletion"
+  fi
+
+  # Teardown S3 log bucket.
+  local args=()
+  [[ "${VERBOSE:-false}" == true ]] && args+=(--verbose)
+
+  run_script "$S3_BUCKET_CTL" --down \
+    --bucket-name "$TRAIL_BUCKET_NAME" \
+    "${args[@]}"
+}
+
+# ---------------------------------------------------------------------------
+# trail_status
+# ---------------------------------------------------------------------------
+trail_status() {
+  msg INFO "Checking CloudTrail status: $TRAIL_NAME"
+
+  # S3 bucket status.
+  local args=()
+  [[ "${VERBOSE:-false}" == true ]] && args+=(--verbose)
+
+  "$S3_BUCKET_CTL" --status \
+    --bucket-name "$TRAIL_BUCKET_NAME" \
+    "${args[@]}" || true
+
+  local exists
+  exists=$(aws cloudtrail describe-trails \
+    --trail-name-list "$TRAIL_NAME" \
+    --region "$AWS_REGION" \
+    --query "trailList[?Name=='${TRAIL_NAME}'].Name" \
+    --output text 2>/dev/null || echo "")
+
+  if [[ -z "$exists" ]]; then
+    msg WARNING "CloudTrail trail '$TRAIL_NAME' does not exist"
+    return 0
+  fi
+
+  msg SUCCESS "CloudTrail trail exists: $TRAIL_NAME"
 
   msg INFO "Trail Status:"
   aws cloudtrail get-trail-status \
     --name "$TRAIL_NAME" \
-    --region "$AWS_REGION"
+    --region "$AWS_REGION" \
+    --output json
+
+  msg INFO "Event Selectors:"
+  aws cloudtrail get-event-selectors \
+    --trail-name "$TRAIL_NAME" \
+    --region "$AWS_REGION" \
+    --output json
 }
 
+# ---------------------------------------------------------------------------
+# main
+# ---------------------------------------------------------------------------
 main() {
   while [[ $# -gt 0 ]]; do
     case "$1" in
-    --aws-account-id)
-      AWS_ACCOUNT_ID="$2"
-      require_variable AWS_ACCOUNT_ID
-      shift 2
-      ;;
-
-    --event-selectors-rw-type)
-      TRAIL_EVENT_SELECTOR_READ_WRITE_TYPE="$2"
-      require_variable TRAIL_EVENT_SELECTOR_READ_WRITE_TYPE
-      shift 2
-      ;;
-
-    --bucket-encryption-sse-algorithm)
-      TRAIL_BUCKET_ENCRYPTION_SSE_ALGORITHM="$2"
-      require_variable TRAIL_BUCKET_ENCRYPTION_SSE_ALGORITHM
-      shift 2
-      ;;
-
-    --aws-region)
-      AWS_REGION="$2"
-      require_variable AWS_REGION
-      shift 2
-      ;;
-
-    -v | --verbose)
-      VERBOSE=true
-      shift
-      ;;
-
     --up | --down | --status)
       ACTION="$1"
       shift
       ;;
-
+    --aws-account-id)
+      AWS_ACCOUNT_ID="$2"
+      shift 2
+      ;;
+    --aws-region)
+      AWS_REGION="$2"
+      shift 2
+      ;;
+    --trail-name)
+      TRAIL_NAME="$2"
+      shift 2
+      ;;
+    --event-selectors-rw-type)
+      TRAIL_EVENT_SELECTOR_READ_WRITE_TYPE="$2"
+      shift 2
+      ;;
+    --bucket-encryption-sse-algorithm)
+      TRAIL_BUCKET_ENCRYPTION_SSE_ALGORITHM="$2"
+      shift 2
+      ;;
+    -v | --verbose)
+      VERBOSE=true
+      shift
+      ;;
     -h | --help)
       usage
       ;;
-
     *)
       msg ERROR "Unknown option: $1"
       usage
@@ -348,89 +339,51 @@ main() {
     esac
   done
 
-  TRAIL_BUCKET_NAME=${TRAIL_BUCKET_NAME:-"aws-cloudtrail-logs-${AWS_ACCOUNT_ID}"}
+  require_variable AWS_ACCOUNT_ID
+  require_variable AWS_REGION
 
-  msg =====================================================
-  msg INFO "Trail Name...${TRAIL_NAME}"
-  msg INFO "S3 Bucket....${TRAIL_BUCKET_NAME}"
-  msg INFO "Region.......${AWS_REGION}"
-  msg INFO "AWS Account..${AWS_ACCOUNT_ID}"
-  msg =====================================================
-
-  ARGS=()
-
-  if [[ "$VERBOSE" == true ]]; then
-    ARGS+=(--verbose)
-  fi
+  TRAIL_BUCKET_NAME="${TRAIL_BUCKET_NAME:-aws-cloudtrail-logs-${AWS_ACCOUNT_ID}-${AWS_REGION}}"
 
   case "${ACTION:-}" in
-  --up)
-    run_script \
-      "$S3_BUCKET_MANAGEMENT_SCRIPT" \
-      "$ACTION" \
-      --aws-account-id "$AWS_ACCOUNT_ID" \
-      --aws-region "$AWS_REGION" \
-      --bucket-name "$TRAIL_BUCKET_NAME" \
-      --bucket-encryption-sse-algorithm "$TRAIL_BUCKET_ENCRYPTION_SSE_ALGORITHM" \
-      "${ARGS[@]}"
-
-    create_trail
-    ;;
-
-  --down)
-    run_script \
-      "$S3_BUCKET_MANAGEMENT_SCRIPT" \
-      "$ACTION" \
-      --bucket-name "$TRAIL_BUCKET_NAME" \
-      "${ARGS[@]}"
-
-    delete_trail
-    ;;
-
-  --status)
-    run_script \
-      "$S3_BUCKET_MANAGEMENT_SCRIPT" \
-      "$ACTION" \
-      --bucket-name "$TRAIL_BUCKET_NAME" \
-      "${ARGS[@]}"
-
-    trail_status
-    ;;
-
+  --up) create_trail ;;
+  --down) delete_trail ;;
+  --status) trail_status ;;
   *)
-    msg ERROR "Missing action (--up/--down)"
+    msg ERROR "Action required: --up, --down, or --status"
     usage
     ;;
   esac
 
-  msg =================================================================================================================================================================================================
-  msg INFO "CloudTrail Console...https://${AWS_REGION}.console.aws.amazon.com/cloudtrailv2/home?region=${AWS_REGION}#/trails/arn:aws:cloudtrail:${AWS_REGION}:${AWS_ACCOUNT_ID}:trail/${TRAIL_NAME}"
-  msg INFO "Trail log location...https://${AWS_REGION}.console.aws.amazon.com/s3/buckets/${TRAIL_BUCKET_NAME}?region=${AWS_REGION}&prefix=AWSLogs%2F${AWS_ACCOUNT_ID}%2F&tab=objects"
+  msg "========================================================================================================="
+  msg INFO "CloudTrail Console...https://${AWS_REGION}.console.aws.amazon.com/cloudtrailv2/home?region=${AWS_REGION}#/trails"
   msg INFO "Trail Name...........${TRAIL_NAME}"
   msg INFO "S3 Bucket............${TRAIL_BUCKET_NAME}"
   msg INFO "Region...............${AWS_REGION}"
   msg INFO "AWS Account..........${AWS_ACCOUNT_ID}"
-  msg =================================================================================================================================================================================================
+  msg "========================================================================================================="
 }
 
-# Load scripts
+# ---------------------------------------------------------------------------
+# Bootstrap
+# ---------------------------------------------------------------------------
 if [[ -s "${LIB_DIR}/common" ]]; then
   # shellcheck disable=SC1091
   . "${LIB_DIR}/common"
 else
-  echo "[ERROR] Missing Script: '${LIB_DIR}/common'"
+  echo "[ERROR] Missing: ${LIB_DIR}/common" >&2
   exit 1
 fi
 load_script "${LIB_DIR}/logger"
 
-# Banner
-cat <<EOF
- ██████╗██╗      ██████╗ ██╗   ██╗██████╗     ████████╗██████╗  █████╗ ██╗██╗         ███╗   ███╗ █████╗ ███╗   ██╗ █████╗  ██████╗ ███████╗██████╗
-██╔════╝██║     ██╔═══██╗██║   ██║██╔══██╗    ╚══██╔══╝██╔══██╗██╔══██╗██║██║         ████╗ ████║██╔══██╗████╗  ██║██╔══██╗██╔════╝ ██╔════╝██╔══██╗
-██║     ██║     ██║   ██║██║   ██║██║  ██║       ██║   ██████╔╝███████║██║██║         ██╔████╔██║███████║██╔██╗ ██║███████║██║  ███╗█████╗  ██████╔╝
-██║     ██║     ██║   ██║██║   ██║██║  ██║       ██║   ██╔══██╗██╔══██║██║██║         ██║╚██╔╝██║██╔══██║██║╚██╗██║██╔══██║██║   ██║██╔══╝  ██╔══██╗
-╚██████╗███████╗╚██████╔╝╚██████╔╝██████╔╝       ██║   ██║  ██║██║  ██║██║███████╗    ██║ ╚═╝ ██║██║  ██║██║ ╚████║██║  ██║╚██████╔╝███████╗██║  ██║
- ╚═════╝╚══════╝ ╚═════╝  ╚═════╝ ╚═════╝        ╚═╝   ╚═╝  ╚═╝╚═╝  ╚═╝╚═╝╚══════╝    ╚═╝     ╚═╝╚═╝  ╚═╝╚═╝  ╚═══╝╚═╝  ╚═╝ ╚═════╝ ╚══════╝╚═╝  ╚═╝
-EOF
+trap 'msg ERROR "Unexpected error at line $LINENO: $BASH_COMMAND"' ERR
+
+cat <<'BANNER'
+ ██████╗██╗      ██████╗ ██╗   ██╗██████╗     ████████╗██████╗  █████╗ ██╗██╗          ██████╗████████╗██╗
+██╔════╝██║     ██╔═══██╗██║   ██║██╔══██╗    ╚══██╔══╝██╔══██╗██╔══██╗██║██║         ██╔════╝╚══██╔══╝██║
+██║     ██║     ██║   ██║██║   ██║██║  ██║       ██║   ██████╔╝███████║██║██║         ██║        ██║   ██║
+██║     ██║     ██║   ██║██║   ██║██║  ██║       ██║   ██╔══██╗██╔══██║██║██║         ██║        ██║   ██║
+╚██████╗███████╗╚██████╔╝╚██████╔╝██████╔╝       ██║   ██║  ██║██║  ██║██║███████╗    ╚██████╗   ██║   ███████╗
+ ╚═════╝╚══════╝ ╚═════╝  ╚═════╝ ╚═════╝        ╚═╝   ╚═╝  ╚═╝╚═╝  ╚═╝╚═╝╚══════╝     ╚═════╝   ╚═╝   ╚══════╝
+BANNER
 
 main "$@"

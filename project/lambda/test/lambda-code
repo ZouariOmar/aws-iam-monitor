@@ -1,17 +1,17 @@
 #!/usr/bin/env bash
 # =========================================
 # FILE
-#   event-bridge/test/rule_exists
+#   lambda/test/lambda-code
 #
 # SYNOPSIS
-#   Test script to verify EventBridge rule existence.
+#   Test script to verify Lambda function code SHA-256 hash.
 # =========================================
 set -Eeuo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 LIB_DIR="${LIB_DIR:-${SCRIPT_DIR}/../../lib}"
 
-RULE_NAME="${RULE_NAME:-aws-iam-monitor-rule}"
+LAMBDA_FUNCTION_NAME="${LAMBDA_FUNCTION_NAME:-aws-iam-monitor-lambda}"
 AWS_REGION="${AWS_REGION:-$(aws configure get region 2>/dev/null || echo 'us-east-1')}"
 
 if [[ -s "${LIB_DIR}/common" ]]; then
@@ -23,10 +23,16 @@ else
 fi
 load_script "${LIB_DIR}/logger"
 
-if aws events describe-rule --name "$RULE_NAME" --region "$AWS_REGION" &>/dev/null; then
-  msg SUCCESS "EventBridge rule exists: ${RULE_NAME}"
+CODE_HASH=$(aws lambda get-function \
+  --function-name "$LAMBDA_FUNCTION_NAME" \
+  --region "$AWS_REGION" \
+  --query 'Configuration.CodeSha256' \
+  --output text 2>/dev/null || echo "")
+
+if [[ -n "$CODE_HASH" && "$CODE_HASH" != "None" ]]; then
+  msg SUCCESS "Lambda code hash exists: ${CODE_HASH}"
   exit 0
 fi
 
-msg ERROR "EventBridge rule does not exist: ${RULE_NAME}"
+msg ERROR "Lambda code hash missing"
 exit 1
