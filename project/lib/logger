@@ -1,75 +1,90 @@
 #!/usr/bin/env bash
 # =========================================
-# .FILE
-#   logger
+# FILE
+#   lib/logger
 #
-# .SYNOPSIS
-#   Logging utility functions for AWS IAM Monitor scripts
+# SYNOPSIS
+#   Logging utility for aws-iam-monitor scripts.
 #
-# .DESCRIPTION
-#   Provides a reusable logging function with different
-#   message levels and terminal formatting.
+# DESCRIPTION
+#   Provides a reusable msg() function with
+#   five log levels and ANSI terminal formatting.
 #
-# .PARAMETER type
-#   Log message type:
-#     INFO
-#     SUCCESS
-#     WARNING
-#     ERROR
-#     DEBUG
+#   Levels:
+#     INFO    - Informational messages (blue)
+#     SUCCESS - Operation completed (green)
+#     WARNING - Non-fatal conditions (yellow)
+#     ERROR   - Failures (red, sent to stderr)
+#     DEBUG   - Verbose detail (cyan)
 #
-# .PARAMETER message
-#   Message content to display.
+#   When called with a single argument, prints
+#   the argument in white (section separator).
 #
-# .INPUTS
-#   Log type and message string.
-#
-# .OUTPUTS
-#   Prints formatted log messages to stdout/stderr.
-#
-# .NOTES
-#   Project       : aws-iam-monitor
-#   Version       : 1.0
-#   Author        : @ZouariOmar (zouariomar20@gmail.com)
-#   Created       : 08/07/2026
-#   Change Log    : 1.0 Initial release
-#
-# .EXAMPLE
+# USAGE
 #   source lib/logger
 #
-#   msg INFO "Starting IAM setup"
-#   msg SUCCESS "User created successfully"
-#   msg ERROR "Failed to create role"
+#   msg INFO    "Starting IAM setup"
+#   msg SUCCESS "User created"
+#   msg WARNING "Resource already exists"
+#   msg ERROR   "Failed to create role"
+#   msg DEBUG   "ARN: arn:aws:iam::..."
+#   msg "=============================="
+#
+# NOTES
+#   Project     : aws-iam-monitor
+#   Version     : 2.0
+#   Author      : @ZouariOmar (zouariomar20@gmail.com)
+#   Created     : 08/07/2026
+#   Updated     : 03/08/2026
 #
 # shellcheck disable=SC1091
 # =========================================
 set -Eeuo pipefail
 
-# Load colors
-[[ -s "$HOME/.bash/.bash_colors" ]] || {
-  echo "Installing bash_colors..."
-  mkdir -p "$HOME/.bash"
-  curl -fsSL "https://raw.githubusercontent.com/ZouariOmar/dot-files/refs/heads/main/dot-files/bash/.bash/.bash_colors" \
-    -o "$HOME/.bash/.bash_colors"
-}
-. "$HOME/.bash/.bash_colors"
+# ---------------------------------------------------------------------------
+# ANSI color codes — inlined
+# ---------------------------------------------------------------------------
+readonly _LOG_RED='\033[0;31m'
+readonly _LOG_GREEN='\033[0;32m'
+readonly _LOG_YELLOW='\033[1;33m'
+readonly _LOG_BLUE='\033[0;34m'
+readonly _LOG_CYAN='\033[0;36m'
+readonly _LOG_WHITE='\033[1;37m'
+readonly _LOG_RESET='\033[0m'
 
+# ---------------------------------------------------------------------------
+# msg TYPE MESSAGE...
+#
+# Print a formatted log line to stdout (or stderr for ERROR).
+# If called with a single argument, prints it in white — useful for
+# separator lines (e.g. msg "===========").
+# ---------------------------------------------------------------------------
 msg() {
   if [[ $# -eq 1 ]]; then
-    echo -e "$WHITE$1$RESET"
-    return
+    printf '%b%s%b\n' "$_LOG_WHITE" "$1" "$_LOG_RESET"
+    return 0
   fi
 
   local type="$1"
   shift
 
+  local color="$_LOG_RESET"
+
   case "$type" in
-  INFO) color="$BLUE" ;;
-  SUCCESS) color="$GREEN" ;;
-  WARNING) color="$YELLOW" ;;
-  ERROR) color="$RED" ;;
-  DEBUG) color="$CYAN" ;;
+  INFO) color="$_LOG_BLUE" ;;
+  SUCCESS) color="$_LOG_GREEN" ;;
+  WARNING) color="$_LOG_YELLOW" ;;
+  ERROR) color="$_LOG_RED" ;;
+  DEBUG) color="$_LOG_CYAN" ;;
+  *)
+    printf '%b[LOGGER]%b Unknown log level: %s\n' \
+      "$_LOG_YELLOW" "$_LOG_RESET" "$type" >&2
+    ;;
   esac
 
-  printf "%b[%s]%b %s\n" "$color" "$type" "$RESET" "$*"
+  if [[ "$type" == "ERROR" ]]; then
+    printf '%b[%s]%b %s\n' "$color" "$type" "$_LOG_RESET" "$*" >&2
+  else
+    printf '%b[%s]%b %s\n' "$color" "$type" "$_LOG_RESET" "$*"
+  fi
 }
