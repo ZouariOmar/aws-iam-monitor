@@ -26,7 +26,8 @@ import ipaddress
 import json
 import os
 import sys
-from datetime import datetime, timezone
+from datetime import UTC, datetime
+
 import boto3
 from botocore.exceptions import ClientError
 
@@ -185,7 +186,7 @@ def store_audit(record: dict) -> bool:
         )
         return False
 
-    timestamp = datetime.now(timezone.utc)
+    timestamp = datetime.now(UTC)
     key = (
         f"iam-audit/"
         f"{timestamp.year:04d}/"
@@ -218,24 +219,52 @@ def send_alert(record: dict) -> bool:
 
     subject = f"[{record['risk']} RISK] AWS IAM Security Alert: {record['action']}"
     message = f"""========================================
-AWS IAM SECURITY ALERT
+     AWS IAM MONITOR - SECURITY ALERT
 ========================================
 
-Severity     : {record["risk"]}
-Action       : {record["action"]}
-Actor        : {record["actor"]}
-Target       : {record["target"]}
-Source IP    : {record["source_ip"]}
-AWS Region   : {record["region"]}
-Account ID   : {record["account_id"]}
-Event Time   : {record["timestamp"]}
+ALERT TYPE
+  High-Risk IAM Activity
 
-----------------------------------------
-CloudTrail Event Summary:
-The IAM action '{record["action"]}' was executed by '{record["actor"]}' on target '{record["target"]}' from IP address '{record["source_ip"]}'.
+SEVERITY
+  {record["risk"]}
 
-Immediate Review Required:
-Inspect AWS CloudTrail logs and IAM policy history to verify whether this activity was authorized.
+-------------------------------------------------------
+EVENT DETAILS
+-------------------------------------------------------
+
+  Action.......{record["action"]}
+  Actor........{record["actor"]}
+  Target.......{record["target"]}
+  Source IP....{record["source_ip"]}
+  AWS Region...{record["region"]}
+  Account ID...{record["account_id"]}
+  Event Time...{record["timestamp"]}
+
+-------------------------------------------------------
+CLOUDTRAIL EVENT SUMMARY
+-------------------------------------------------------
+
+The IAM action '{record["action"]}' was executed by
+'{record["actor"]}' on target '{record["target"]}'
+from source IP '{record["source_ip"]}'.
+
+-------------------------------------------------------
+IMMEDIATE ACTION REQUIRED
+-------------------------------------------------------
+
+Review the following:
+
+  1. AWS CloudTrail logs for this event.
+  2. IAM policy history and recent changes.
+  3. The actor's permissions and authentication context.
+  4. The source IP and associated activity.
+
+If this activity was not authorized, take appropriate
+containment and remediation measures.
+
+-------------------------------------------------------
+AWS IAM MONITOR
+Automated Security Notification
 """
 
     try:
@@ -265,7 +294,7 @@ def emit_metric(record: dict) -> bool:
                     ],
                     "Value": 1,
                     "Unit": "Count",
-                    "Timestamp": datetime.now(timezone.utc),
+                    "Timestamp": datetime.now(UTC),
                 }
             ],
         )
@@ -289,7 +318,7 @@ def emit_unauthorized_ip_metric(source_ip: str, actor: str, action: str) -> bool
                     ],
                     "Value": 1,
                     "Unit": "Count",
-                    "Timestamp": datetime.now(timezone.utc),
+                    "Timestamp": datetime.now(UTC),
                 }
             ],
         )
@@ -306,34 +335,60 @@ def emit_unauthorized_ip_metric(source_ip: str, actor: str, action: str) -> bool
 def send_unauthorized_ip_alert(record: dict) -> bool:
     """Send SNS alert for an unauthorised source IP access attempt."""
     if not SNS_TOPIC_ARN:
-        print(
-            "[INFO] SNS_TOPIC_ARN not set; skipping unauthorized IP alert."
-        )
+        print("[INFO] SNS_TOPIC_ARN not set; skipping unauthorized IP alert.")
         return False
 
     subject = "[SECURITY ALERT] Unauthorized IP Access Attempt Detected"
-    message = f"""========================================
-AWS IAM MONITOR — UNAUTHORIZED IP ACCESS
+    message = f"""
+========================================
+     AWS IAM MONITOR - SECURITY ALERT
 ========================================
 
-An IAM action was attempted from a source IP address
-that is NOT in the configured IP whitelist.
+ALERT TYPE
+  Unauthorized IP Access
 
-Severity     : CRITICAL
-Action       : {record["action"]}
-Actor        : {record["actor"]}
-Source IP    : {record["source_ip"]}  ← BLOCKED
-AWS Region   : {record["region"]}
-Account ID   : {record["account_id"]}
-Event Time   : {record["timestamp"]}
+SEVERITY
+  CRITICAL
 
-----------------------------------------
-Allowed CIDRs: {ALLOWED_IPS_RAW or "(not configured)"}
+-------------------------------------------------------
+BLOCKED REQUEST
+-------------------------------------------------------
 
-Immediate Action Required:
-Review AWS CloudTrail logs for activity from this IP address.
-If this access was not authorised, consider blocking the IP
-at the network perimeter and revoking any associated credentials.
+  Action.......{record["action"]}
+  Actor........{record["actor"]}
+  Source IP....{record["source_ip"]} [BLOCKED]
+  AWS Region...{record["region"]}
+  Account ID...{record["account_id"]}
+  Event Time...{record["timestamp"]}
+
+-------------------------------------------------------
+IP WHITELIST
+-------------------------------------------------------
+
+The request originated from a source IP address
+that is NOT included in the configured whitelist.
+
+  Allowed CIDRs:
+    {ALLOWED_IPS_RAW or "(not configured)"}
+
+-------------------------------------------------------
+IMMEDIATE ACTION REQUIRED
+-------------------------------------------------------
+
+Review AWS CloudTrail logs for activity originating
+from the blocked IP address.
+
+If this activity was not authorized:
+
+  1. Investigate the associated CloudTrail events.
+  2. Review the actor's IAM permissions and credentials.
+  3. Check for additional activity from the source IP.
+  4. Consider blocking the IP at the network perimeter.
+  5. Revoke or rotate associated credentials if necessary.
+
+-------------------------------------------------------
+AWS IAM MONITOR
+Automated Security Notification
 """
 
     try:
@@ -348,7 +403,9 @@ at the network perimeter and revoking any associated credentials.
         )
         return True
     except ClientError as e:
-        print(f"[ERROR] Failed to publish unauthorized IP SNS alert: {e}", file=sys.stderr)
+        print(
+            f"[ERROR] Failed to publish unauthorized IP SNS alert: {e}", file=sys.stderr
+        )
         return False
 
 
@@ -367,7 +424,7 @@ def lambda_handler(event: dict, context) -> dict:
             "source_ip": "127.0.0.1",
             "region": os.environ.get("AWS_REGION", "us-east-1"),
             "account_id": "000000000000",
-            "timestamp": datetime.now(timezone.utc).isoformat(),
+            "timestamp": datetime.now(UTC).isoformat(),
         }
         store_audit(test_record)
         emit_metric(test_record)
@@ -409,7 +466,7 @@ def lambda_handler(event: dict, context) -> dict:
             "source_ip": source_ip,
             "region": detail.get("awsRegion", os.environ.get("AWS_REGION", "unknown")),
             "account_id": detail.get("recipientAccountId", "unknown"),
-            "timestamp": detail.get("eventTime", datetime.now(timezone.utc).isoformat()),
+            "timestamp": detail.get("eventTime", datetime.now(UTC).isoformat()),
         }
         emit_unauthorized_ip_metric(source_ip, actor, action)
         send_unauthorized_ip_alert(blocked_record)
@@ -430,7 +487,7 @@ def lambda_handler(event: dict, context) -> dict:
         "source_ip": source_ip,
         "region": detail.get("awsRegion", os.environ.get("AWS_REGION", "unknown")),
         "account_id": detail.get("recipientAccountId", "unknown"),
-        "timestamp": detail.get("eventTime", datetime.now(timezone.utc).isoformat()),
+        "timestamp": detail.get("eventTime", datetime.now(UTC).isoformat()),
     }
 
     print(f"[INFO] Processed IAM Event: {json.dumps(record, indent=2)}")
