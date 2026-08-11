@@ -6,11 +6,23 @@ Processes AWS CloudTrail events routed via Amazon EventBridge, categorizes IAM
 actions by risk severity, records audit logs in Amazon S3, sends SNS security
 alerts for high-risk changes, and emits CloudWatch metrics for monitoring dashboards.
 
+IP Whitelist:
+  When ALLOWED_IPS is set, every CloudTrail event is checked against the
+  configured CIDR ranges before processing. Events from source IPs not in the
+  whitelist are denied: an UnauthorizedIPAccess CloudWatch metric is emitted,
+  an SNS alert is published, and the handler returns early with status "denied".
+  AWS service endpoint sources (e.g. cloudtrail.amazonaws.com) bypass IP
+  validation to avoid false positives from internal AWS service calls.
+
 Environment Variables:
   AUDIT_BUCKET   Amazon S3 bucket name for storing audit history logs.
   SNS_TOPIC_ARN  Amazon SNS topic ARN for publishing security alert notifications.
+  ALLOWED_IPS    Comma-separated list of trusted IPv4/IPv6 CIDR ranges
+                 (e.g. "203.0.113.10/32,197.238.33.0/24"). Leave unset to
+                 disable IP filtering entirely.
 """
 
+import ipaddress
 import json
 import os
 import sys
@@ -21,6 +33,8 @@ from botocore.exceptions import ClientError
 # Environment variables
 S3_BUCKET = os.environ.get("AUDIT_BUCKET")
 SNS_TOPIC_ARN = os.environ.get("SNS_TOPIC_ARN")
+# Comma-separated trusted CIDR ranges (empty string = no IP filtering)
+ALLOWED_IPS_RAW = os.environ.get("ALLOWED_IPS", "")
 
 # Monitored IAM actions and risk classifications
 MONITORED_ACTIONS = {
@@ -114,6 +128,53 @@ def get_target(detail: dict) -> str:
 def get_source_ip(detail: dict) -> str:
     """Extract source IP address from CloudTrail event detail."""
     return detail.get("sourceIPAddress", "unknown")
+
+
+def _parse_allowed_networks() -> list:
+    """Parse ALLOWED_IPS env var into a list of ip_network objects."""
+    if not ALLOWED_IPS_RAW:
+        return []
+    networks = []
+    for cidr in ALLOWED_IPS_RAW.split(","):
+        cidr = cidr.strip()
+        if not cidr:
+            continue
+        try:
+            networks.append(ipaddress.ip_network(cidr, strict=False))
+        except ValueError:
+            print(f"[WARN] Invalid CIDR in ALLOWED_IPS, skipping: '{cidr}'")
+    return networks
+
+
+# Pre-parsed network list (evaluated once at cold start).
+_ALLOWED_NETWORKS = _parse_allowed_networks()
+
+
+def is_ip_allowed(source_ip: str) -> bool:
+    """Return True if source_ip is within a trusted CIDR range.
+
+    Rules:
+    - When ALLOWED_IPS is not configured, all IPs are allowed (no filtering).
+    - AWS service endpoint strings (ending in .amazonaws.com) are always
+      allowed to prevent false positives from internal AWS service calls.
+    - source_ip values of 'unknown' are allowed through so that events with
+      missing IP data are not silently dropped.
+    """
+    # No whitelist configured — allow everything.
+    if not _ALLOWED_NETWORKS:
+        return True
+
+    # AWS internal service sources bypass IP filtering.
+    if source_ip.endswith(".amazonaws.com") or source_ip == "unknown":
+        return True
+
+    try:
+        addr = ipaddress.ip_address(source_ip)
+        return any(addr in net for net in _ALLOWED_NETWORKS)
+    except ValueError:
+        # Non-parseable string (e.g. a service name) — treat as allowed.
+        print(f"[WARN] Could not parse source IP '{source_ip}' — treating as allowed")
+        return True
 
 
 def store_audit(record: dict) -> bool:
@@ -214,6 +275,83 @@ def emit_metric(record: dict) -> bool:
         return False
 
 
+def emit_unauthorized_ip_metric(source_ip: str, actor: str, action: str) -> bool:
+    """Emit CloudWatch UnauthorizedIPAccess metric for blocked IP events."""
+    try:
+        get_cw_client().put_metric_data(
+            Namespace="AWSIAMMonitor",
+            MetricData=[
+                {
+                    "MetricName": "UnauthorizedIPAccess",
+                    "Dimensions": [
+                        {"Name": "SourceIP", "Value": source_ip},
+                        {"Name": "Action", "Value": action},
+                    ],
+                    "Value": 1,
+                    "Unit": "Count",
+                    "Timestamp": datetime.now(timezone.utc),
+                }
+            ],
+        )
+        print(
+            f"[INFO] UnauthorizedIPAccess metric emitted "
+            f"(SourceIP={source_ip}, Action={action})"
+        )
+        return True
+    except ClientError as e:
+        print(f"[WARN] Failed to emit UnauthorizedIPAccess metric: {e}")
+        return False
+
+
+def send_unauthorized_ip_alert(record: dict) -> bool:
+    """Send SNS alert for an unauthorised source IP access attempt."""
+    if not SNS_TOPIC_ARN:
+        print(
+            "[INFO] SNS_TOPIC_ARN not set; skipping unauthorized IP alert."
+        )
+        return False
+
+    subject = "[SECURITY ALERT] Unauthorized IP Access Attempt Detected"
+    message = f"""========================================
+AWS IAM MONITOR — UNAUTHORIZED IP ACCESS
+========================================
+
+An IAM action was attempted from a source IP address
+that is NOT in the configured IP whitelist.
+
+Severity     : CRITICAL
+Action       : {record["action"]}
+Actor        : {record["actor"]}
+Source IP    : {record["source_ip"]}  ← BLOCKED
+AWS Region   : {record["region"]}
+Account ID   : {record["account_id"]}
+Event Time   : {record["timestamp"]}
+
+----------------------------------------
+Allowed CIDRs: {ALLOWED_IPS_RAW or "(not configured)"}
+
+Immediate Action Required:
+Review AWS CloudTrail logs for activity from this IP address.
+If this access was not authorised, consider blocking the IP
+at the network perimeter and revoking any associated credentials.
+"""
+
+    try:
+        get_sns_client().publish(
+            TopicArn=SNS_TOPIC_ARN,
+            Subject=subject[:100],
+            Message=message,
+        )
+        print(
+            f"[INFO] Unauthorized IP alert published to SNS: {SNS_TOPIC_ARN} "
+            f"(source_ip={record['source_ip']})"
+        )
+        return True
+    except ClientError as e:
+        print(f"[ERROR] Failed to publish unauthorized IP SNS alert: {e}", file=sys.stderr)
+        return False
+
+
 def lambda_handler(event: dict, context) -> dict:
     """Main AWS Lambda handler for processing CloudTrail events."""
     print(f"[DEBUG] Received event: {json.dumps(event)}")
@@ -254,12 +392,42 @@ def lambda_handler(event: dict, context) -> dict:
         return {"status": "ignored", "action": action}
 
     risk = MONITORED_ACTIONS[action]
+    source_ip = get_source_ip(detail)
+
+    # ---- IP Whitelist Enforcement -----------------------------------------
+    if not is_ip_allowed(source_ip):
+        actor = get_actor(detail)
+        print(
+            f"[WARN] Unauthorized IP access attempt blocked: "
+            f"source_ip={source_ip}, action={action}, actor={actor}"
+        )
+        blocked_record = {
+            "action": action,
+            "risk": "CRITICAL",
+            "actor": actor,
+            "target": get_target(detail),
+            "source_ip": source_ip,
+            "region": detail.get("awsRegion", os.environ.get("AWS_REGION", "unknown")),
+            "account_id": detail.get("recipientAccountId", "unknown"),
+            "timestamp": detail.get("eventTime", datetime.now(timezone.utc).isoformat()),
+        }
+        emit_unauthorized_ip_metric(source_ip, actor, action)
+        send_unauthorized_ip_alert(blocked_record)
+        return {
+            "status": "denied",
+            "reason": "unauthorized_ip",
+            "source_ip": source_ip,
+            "action": action,
+            "actor": actor,
+        }
+    # ---- End IP Whitelist Enforcement ------------------------------------
+
     record = {
         "action": action,
         "risk": risk,
         "actor": get_actor(detail),
         "target": get_target(detail),
-        "source_ip": get_source_ip(detail),
+        "source_ip": source_ip,
         "region": detail.get("awsRegion", os.environ.get("AWS_REGION", "unknown")),
         "account_id": detail.get("recipientAccountId", "unknown"),
         "timestamp": detail.get("eventTime", datetime.now(timezone.utc).isoformat()),
