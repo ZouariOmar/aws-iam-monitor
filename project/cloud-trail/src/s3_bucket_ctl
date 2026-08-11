@@ -309,7 +309,10 @@ delete_s3_bucket() {
 s3_bucket_status() {
   msg INFO "Checking S3 bucket: $BUCKET_NAME"
 
-  if ! aws s3api head-bucket --bucket "$BUCKET_NAME" &>/dev/null; then
+  local region_flag=()
+  [[ -n "$AWS_REGION" ]] && region_flag=(--region "$AWS_REGION")
+
+  if ! aws s3api head-bucket --bucket "$BUCKET_NAME" "${region_flag[@]}" &>/dev/null; then
     msg WARNING "S3 bucket does not exist: $BUCKET_NAME"
     return 0
   fi
@@ -317,17 +320,17 @@ s3_bucket_status() {
   msg SUCCESS "S3 bucket exists: $BUCKET_NAME"
 
   msg INFO "Location:"
-  aws s3api get-bucket-location --bucket "$BUCKET_NAME"
+  aws s3api get-bucket-location --bucket "$BUCKET_NAME" "${region_flag[@]}" 2>/dev/null || true
 
   msg INFO "Versioning:"
-  aws s3api get-bucket-versioning --bucket "$BUCKET_NAME" || true
+  aws s3api get-bucket-versioning --bucket "$BUCKET_NAME" "${region_flag[@]}" 2>/dev/null || true
 
   msg INFO "Encryption:"
-  aws s3api get-bucket-encryption --bucket "$BUCKET_NAME" 2>/dev/null ||
+  aws s3api get-bucket-encryption --bucket "$BUCKET_NAME" "${region_flag[@]}" 2>/dev/null ||
     msg WARNING "No encryption configured"
 
   msg INFO "Bucket policy:"
-  aws s3api get-bucket-policy --bucket "$BUCKET_NAME" 2>/dev/null ||
+  aws s3api get-bucket-policy --bucket "$BUCKET_NAME" "${region_flag[@]}" 2>/dev/null ||
     msg WARNING "No bucket policy configured"
 }
 

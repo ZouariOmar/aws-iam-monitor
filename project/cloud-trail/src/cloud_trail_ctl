@@ -26,7 +26,7 @@
 #   ./cloud_trail_ctl --status --aws-account-id <id> --aws-region <region> [OPTIONS]
 #
 # OPTIONS
-#   --up | --down | --status            Lifecycle action (required).
+#   --up | --down | --status | --test   Lifecycle action (required).
 #   --aws-account-id <id>               AWS account ID (required).
 #   --aws-region   <region>             AWS region (required).
 #   --trail-name   <name>               CloudTrail trail name.
@@ -266,6 +266,7 @@ trail_status() {
 
   "$S3_BUCKET_CTL" --status \
     --bucket-name "$TRAIL_BUCKET_NAME" \
+    --aws-region "$AWS_REGION" \
     "${args[@]}" || true
 
   local exists
@@ -301,7 +302,7 @@ trail_status() {
 main() {
   while [[ $# -gt 0 ]]; do
     case "$1" in
-    --up | --down | --status)
+    --up | --down | --status | --test)
       ACTION="$1"
       shift
       ;;
@@ -347,9 +348,9 @@ main() {
   case "${ACTION:-}" in
   --up) create_trail ;;
   --down) delete_trail ;;
-  --status) trail_status ;;
+  --status | --test) trail_status ;;
   *)
-    msg ERROR "Action required: --up, --down, or --status"
+    msg ERROR "Action required: --up, --down, --status, or --test"
     usage
     ;;
   esac
