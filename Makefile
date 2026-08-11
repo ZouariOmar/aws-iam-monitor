@@ -54,16 +54,16 @@ help:
 version-up: ## Update project version
 	@$(call print_title,Current version: $(PROJECT_VERSION)); \
 	read -r -p "Enter new version (e.g. 1.2.3): " NEW_VERSION; \
-	if [ -z "$($NEW_VERSION)" ]; then echo "Cancelled"; exit 1; fi; \
-	echo "$($NEW_VERSION)" > $(VERSION_FILE); \
-	echo "Version updated to $($NEW_VERSION)"; \
+	if [ -z "$$NEW_VERSION" ]; then echo "Cancelled"; exit 1; fi; \
+	echo "$$NEW_VERSION" > $(VERSION_FILE); \
+	echo "Version updated to $$NEW_VERSION"; \
 	read -r -p "Create git tag? (y/n): " CONFIRM; \
 	if [ "$$CONFIRM" = "y" ] || [ "$$CONFIRM" = "Y" ]; then \
 		VERSION=$$(cat $(VERSION_FILE)); \
 		echo "Creating git tag v$$VERSION..."; \
 		git add $(VERSION_FILE); \
-		git commit -m "chore(release): v$$(VERSION)" || true; \
-		git tag "v$($VERSION)"; \
+		git commit -m "chore(release): v$$VERSION" || true; \
+		git tag "v$$VERSION"; \
 		echo "Tag created"; \
 	else \
 		echo "Tag skipped"; \
