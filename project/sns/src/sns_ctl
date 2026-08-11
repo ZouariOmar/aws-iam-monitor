@@ -183,18 +183,19 @@ create_sns_topic() {
 
   # Subscribe email if provided
   if [[ -n "$ALERT_EMAIL" ]]; then
-    msg INFO "Subscribing email '$ALERT_EMAIL' to SNS topic..."
 
-    local existing_sub
-    existing_sub=$(aws sns list-subscriptions-by-topic \
+    # Check for a CONFIRMED subscription (SubscriptionArn is a real ARN, not "PendingConfirmation" or "Deleted")
+    local confirmed_sub
+    confirmed_sub=$(aws sns list-subscriptions-by-topic \
       --topic-arn "$topic_arn" \
       --region "$AWS_REGION" \
-      --query "Subscriptions[?Endpoint=='${ALERT_EMAIL}'].SubscriptionArn" \
+      --query "Subscriptions[?Endpoint=='${ALERT_EMAIL}' && SubscriptionArn != 'PendingConfirmation' && SubscriptionArn != 'Deleted'].SubscriptionArn" \
       --output text 2>/dev/null || echo "")
 
-    if [[ -n "$existing_sub" ]]; then
-      msg INFO "Email '$ALERT_EMAIL' is already subscribed to topic"
+    if [[ -n "$confirmed_sub" ]]; then
+      msg INFO "Email '$ALERT_EMAIL' already has a confirmed subscription — skipping"
     else
+      msg INFO "Subscribing email '$ALERT_EMAIL' to SNS topic..."
       local sub_arn
       sub_arn=$(aws sns subscribe \
         --topic-arn "$topic_arn" \
@@ -230,9 +231,11 @@ delete_sns_topic() {
     --output text 2>/dev/null | tr '\t' '\n' || echo "")
 
   while IFS= read -r sub_arn; do
-    [[ -z "$sub_arn" || "$sub_arn" == "PendingConfirmation" ]] && continue
+    [[ -z "$sub_arn" || "$sub_arn" == "PendingConfirmation" || "$sub_arn" == "Deleted" ]] && continue
     aws sns unsubscribe --subscription-arn "$sub_arn" --region "$AWS_REGION" >/dev/null 2>&1 || true
-    [[ "${VERBOSE:-false}" == true ]] && msg DEBUG "Unsubscribed: $sub_arn"
+    if [[ "${VERBOSE:-false}" == true ]]; then
+      msg DEBUG "Unsubscribed: $sub_arn"
+    fi
   done <<<"$subs"
 
   aws sns delete-topic --topic-arn "$topic_arn" --region "$AWS_REGION" >/dev/null 2>&1 || true
