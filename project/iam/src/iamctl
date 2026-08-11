@@ -16,6 +16,12 @@
 #     user_ctl     — IAM users with group membership
 #     role_ctl     — IAM roles with trust policies (optional)
 #
+#   IP Whitelist:
+#     When ALLOWED_IPS is set, generates IPWhitelistPolicy.json
+#     dynamically before policy provisioning. The policy contains
+#     a Deny statement that blocks all IAM actions from source IPs
+#     not in the configured CIDR list.
+#
 #   Resource definitions are read from CSV files in res/:
 #     groups.csv   FORMAT: group,policy
 #     users.csv    FORMAT: user,group
@@ -73,7 +79,7 @@
 #   Version     : 2.0
 #   Author      : @ZouariOmar (zouariomar20@gmail.com)
 #   Created     : 14/07/2026
-#   Updated     : 03/08/2026
+#   Updated     : 11/08/2026
 #
 # shellcheck disable=SC1090,SC1091
 # =========================================
@@ -105,6 +111,11 @@ ACTION=""
 ENABLE_ROLES=false
 VERBOSE="${VERBOSE:-false}"
 
+# IP Whitelist — sourced from the environment (loaded from .env by awsctl).
+ALLOWED_IPS="${ALLOWED_IPS:-}"
+IP_WHITELIST_POLICY_NAME="IPWhitelistPolicy"
+IP_WHITELIST_POLICY_FILE="${IAM_POLICIES_DIR}/${IP_WHITELIST_POLICY_NAME}.json"
+
 ######################
 ### !CONFIGURATION ###
 ######################
@@ -113,7 +124,7 @@ usage() {
   cat <<EOF
 $(msg "USAGE:")
 
-  $(basename "$0") <--up|--down|--status> --aws-account-id <id> [OPTIONS]
+  $(basename "$0") <--up|--down|--status|--test> --aws-account-id <id> [OPTIONS]
 
 
 $(msg "ACTIONS:")
@@ -130,6 +141,9 @@ $(msg "ACTIONS:")
 
   --status
       Report existence of all IAM resources.
+
+  --test
+      Verify status of IAM resources.
 
 
 $(msg "OPTIONS:")
@@ -165,13 +179,70 @@ EOF
 }
 
 # ---------------------------------------------------------------------------
+# generate_ip_whitelist_policy
+#
+# Renders IPWhitelistPolicy.json from the ALLOWED_IPS env variable.
+# ALLOWED_IPS must be a comma-separated list of IPv4/IPv6 CIDR ranges.
+# When ALLOWED_IPS is empty, the function is a no-op (policy file is
+# left as-is, preserving any manually edited template).
+# ---------------------------------------------------------------------------
+generate_ip_whitelist_policy() {
+  if [[ -z "${ALLOWED_IPS:-}" ]]; then
+    msg WARNING "ALLOWED_IPS is not set — skipping IPWhitelistPolicy generation"
+    return 0
+  fi
+
+  msg INFO "Generating IPWhitelistPolicy from ALLOWED_IPS: ${ALLOWED_IPS}"
+
+  # Format comma-separated CIDRs into JSON array elements: "ip1", "ip2"
+  local formatted_ips
+  formatted_ips=$(echo "${ALLOWED_IPS}" | tr ',' '\n' | sed 's/^[[:space:]]*//;s/[[:space:]]*$//' | grep -v '^$' | sed 's/^/"/;s/$/"/' | paste -sd, -)
+
+  cat <<'EOF' >"${IP_WHITELIST_POLICY_FILE}"
+{
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Sid": "DenyNonWhitelistedIPs",
+      "Effect": "Deny",
+      "Action": "*",
+      "Resource": "*",
+      "Condition": {
+        "NotIpAddress": {
+          "aws:SourceIp": [
+            {{ALLOWED_IPS}}
+          ]
+        },
+        "Bool": {
+          "aws:ViaAWSService": "false"
+        }
+      }
+    }
+  ]
+}
+EOF
+
+  sed -i "s|{{ALLOWED_IPS}}|${formatted_ips}|g" "${IP_WHITELIST_POLICY_FILE}"
+
+  msg SUCCESS "IPWhitelistPolicy generated: ${IP_WHITELIST_POLICY_FILE}"
+  if [[ "${VERBOSE:-false}" == true ]]; then
+    msg DEBUG "$(cat "${IP_WHITELIST_POLICY_FILE}")"
+  fi
+}
+
+# ---------------------------------------------------------------------------
 # iam_up  — create policies, groups, users, optionally roles.
 # ---------------------------------------------------------------------------
 iam_up() {
   msg INFO "Starting IAM setup..."
 
+  # Generate IPWhitelistPolicy.json from ALLOWED_IPS before provisioning policies.
+  generate_ip_whitelist_policy
+
   local args=()
-  [[ "${VERBOSE:-false}" == true ]] && args+=(--verbose)
+  if [[ "${VERBOSE:-false}" == true ]]; then
+    args+=(--verbose)
+  fi
 
   # 1. Policies and Groups (from groups.csv: group,policy).
   while IFS=',' read -r group policy; do
@@ -181,7 +252,9 @@ iam_up() {
 
     [[ -z "$group" || -z "$policy" ]] && continue
 
-    [[ "${VERBOSE:-false}" == true ]] && msg DEBUG "Group: $group | Policy: $policy"
+    if [[ "${VERBOSE:-false}" == true ]]; then
+      msg DEBUG "Group: $group | Policy: $policy"
+    fi
 
     run_script "$POLICY_CTL" --up \
       --policy-name "$policy" \
@@ -204,7 +277,9 @@ iam_up() {
 
     [[ -z "$user" || -z "$group" ]] && continue
 
-    [[ "${VERBOSE:-false}" == true ]] && msg DEBUG "User: $user | Group: $group"
+    if [[ "${VERBOSE:-false}" == true ]]; then
+      msg DEBUG "User: $user | Group: $group"
+    fi
 
     run_script "$USER_CTL" --up \
       --user "$user" \
@@ -223,15 +298,32 @@ iam_up() {
 
       [[ -z "$role" || -z "$policy" ]] && continue
 
-      [[ "${VERBOSE:-false}" == true ]] && msg DEBUG "Role: $role | Policy: $policy | Service: $service"
+      if [[ "${VERBOSE:-false}" == true ]]; then
+        msg DEBUG "Role: $role | Policy: $policy | Service: $service"
+      fi
 
-      # Resolve trust policy path based on the service directory.
-      local trust_policy_path
+      # Resolve policy directory and trust policy path based on service.
+      local policy_dir trust_policy_path
       case "$service" in
-      iam) trust_policy_path="${IAM_POLICIES_DIR}/${trust_policy}" ;;
-      lambda) trust_policy_path="${SCRIPT_DIR}/../../lambda/policies/${trust_policy}" ;;
-      *) trust_policy_path="${IAM_POLICIES_DIR}/${trust_policy}" ;;
+      iam)
+        policy_dir="${IAM_POLICIES_DIR}"
+        trust_policy_path="${IAM_POLICIES_DIR}/${trust_policy}"
+        ;;
+      lambda)
+        policy_dir="${SCRIPT_DIR}/../../lambda/policies"
+        trust_policy_path="${SCRIPT_DIR}/../../lambda/policies/${trust_policy}"
+        ;;
+      *)
+        policy_dir="${IAM_POLICIES_DIR}"
+        trust_policy_path="${IAM_POLICIES_DIR}/${trust_policy}"
+        ;;
       esac
+
+      run_script "$POLICY_CTL" --up \
+        --policy-name "$policy" \
+        --policy-dir "$policy_dir" \
+        --aws-account-id "$AWS_ACCOUNT_ID" \
+        "${args[@]}"
 
       run_script "$ROLE_CTL" --up \
         --role-name "$role" \
@@ -252,8 +344,14 @@ iam_up() {
 iam_down() {
   msg INFO "Starting IAM teardown..."
 
+  # Regenerate IPWhitelistPolicy.json so policy_ctl can accurately identify
+  # and delete the correct policy version from AWS.
+  generate_ip_whitelist_policy
+
   local args=()
-  [[ "${VERBOSE:-false}" == true ]] && args+=(--verbose)
+  if [[ "${VERBOSE:-false}" == true ]]; then
+    args+=(--verbose)
+  fi
 
   # 1. Users first (from users.csv: user,group).
   while IFS=',' read -r user group; do
@@ -269,16 +367,25 @@ iam_down() {
 
   done < <(tail -n +2 "$IAM_USERS_FILE")
 
-  # 2. Roles (optional).
+  # 2. Roles and Role Policies (optional).
   if [[ "${ENABLE_ROLES:-false}" == true ]]; then
-    while IFS=',' read -r _service role _policy _trust; do
+    while IFS=',' read -r _service role policy _trust; do
       role="${role// /}"
-      [[ -z "$role" ]] && continue
+      policy="${policy// /}"
 
-      run_script "$ROLE_CTL" --down \
-        --role-name "$role" \
-        --aws-account-id "$AWS_ACCOUNT_ID" \
-        "${args[@]}"
+      if [[ -n "$role" ]]; then
+        run_script "$ROLE_CTL" --down \
+          --role-name "$role" \
+          --aws-account-id "$AWS_ACCOUNT_ID" \
+          "${args[@]}"
+      fi
+
+      if [[ -n "$policy" ]]; then
+        run_script "$POLICY_CTL" --down \
+          --policy-name "$policy" \
+          --aws-account-id "$AWS_ACCOUNT_ID" \
+          "${args[@]}"
+      fi
 
     done < <(tail -n +2 "$IAM_ROLES_FILE")
   fi
@@ -383,7 +490,7 @@ iam_status() {
 main() {
   while [[ $# -gt 0 ]]; do
     case "$1" in
-    --up | --down | --status)
+    --up | --down | --status | --test)
       ACTION="$1"
       shift
       ;;
@@ -414,9 +521,9 @@ main() {
   case "${ACTION:-}" in
   --up) iam_up ;;
   --down) iam_down ;;
-  --status) iam_status ;;
+  --status | --test) iam_status ;;
   *)
-    msg ERROR "Action required: --up, --down, or --status"
+    msg ERROR "Action required: --up, --down, --status, or --test"
     usage
     ;;
   esac
