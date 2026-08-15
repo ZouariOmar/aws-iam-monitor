@@ -215,7 +215,14 @@ execute_target() {
   local action="$2"
   shift 2
 
-  local pass_args=("$action" --aws-account-id "$AWS_ACCOUNT_ID" --aws-region "$AWS_REGION" "$@")
+  local filtered_args=()
+  for arg in "$@"; do
+    if [[ "$arg" != "--role" && "$arg" != "-r" ]]; then
+      filtered_args+=("$arg")
+    fi
+  done
+
+  local pass_args=("$action" --aws-account-id "$AWS_ACCOUNT_ID" --aws-region "$AWS_REGION" "${filtered_args[@]}")
 
   case "$target" in
   iam)
@@ -286,8 +293,12 @@ main() {
   check_aws_region
 
   local common_flags=()
-  [[ "${VERBOSE:-false}" == true ]] && common_flags+=(--verbose)
-  [[ "${ENABLE_ROLES:-false}" == true ]] && common_flags+=(--role)
+  if [[ "${VERBOSE:-false}" == true ]]; then
+    common_flags+=(--verbose)
+  fi
+  if [[ "${ENABLE_ROLES:-false}" == true ]]; then
+    common_flags+=(--role)
+  fi
 
   msg INFO "Action : ${ACTION}"
   msg INFO "Target : ${TARGET}"
@@ -311,7 +322,7 @@ main() {
       execute_target sns "$ACTION" "${common_flags[@]}"
 
       msg INFO "=== Stage 4/5: Lambda Monitoring Environment ==="
-      execute_target lambda "$ACTION" "${common_flags[@]}"
+      execute_target lambda "$ACTION" "${common_flags[@]}" --skip-sns
 
       msg INFO "=== Stage 5/5: EventBridge Rules & Target Wiring ==="
       execute_target event-bridge "$ACTION" "${common_flags[@]}"
@@ -322,7 +333,7 @@ main() {
       execute_target event-bridge "$ACTION" "${common_flags[@]}"
 
       msg INFO "=== Teardown Stage 2/5: Lambda Monitoring Environment ==="
-      execute_target lambda "$ACTION" "${common_flags[@]}"
+      execute_target lambda "$ACTION" "${common_flags[@]}" --skip-sns
 
       msg INFO "=== Teardown Stage 3/5: SNS Alert Environment ==="
       execute_target sns "$ACTION" "${common_flags[@]}"

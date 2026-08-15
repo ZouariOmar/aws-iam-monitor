@@ -1,4 +1,5 @@
 group, policy
 ProdGroup, ProdPolicy
+ProdGroup, IPWhitelistPolicy
 DevGroup, DevPolicy
 TestGroup, AuditPolicy

@@ -21,23 +21,18 @@ cd aws-iam-monitor
 - AWS CLI v2
 - Python 3.14.6
 - uv
-- Docker (optional)
 - Make (optional)
 
 ## Build
 
-```bash
-make build
-```
-
-## Run
-
-```bash
-make run
-```
-
-## Docker
+### Docker
 
 ```bash
 make docker
+```
+
+### Locally
+
+```bash
+make
 ```

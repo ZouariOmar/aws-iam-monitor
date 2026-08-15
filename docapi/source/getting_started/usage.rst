@@ -22,7 +22,7 @@ Targets
 -------
 
 * ``all`` *(default)* : Complete end-to-end monitoring pipeline.
-* ``iam`` : IAM policies, groups, users, and optional roles.
+* ``iam`` : IAM policies (including automated ``IPWhitelistPolicy``), groups, users, and optional roles.
 * ``cloud-trail`` : CloudTrail management events trail and S3 log bucket.
 * ``sns`` : Amazon SNS security alert topic, policy, and email subscriptions.
 * ``lambda`` : Monitoring Lambda function, execution role, and S3 audit bucket.

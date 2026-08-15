@@ -1,19 +1,27 @@
 # =========================
-# Generic Dockerfile
+# AWS IAM Monitor Dockerfile
 # =========================
 
-FROM alpine:3.20
+FROM alpine:latest
 
-# Install basic runtime tools
-RUN apk add --no-cache bash curl
+# Install required tools
+RUN apk add --no-cache \
+  bash \
+  make \
+  uv \
+  aws-cli \
+  jq \
+  sed \
+  zip \
+  openssl \
+  python3 \
+  curl \
+  ca-certificates
 
 WORKDIR /app
 
 # Copy project
 COPY . .
 
-# Optional build step (override in real projects)
-# RUN make build
-
-# Default command (override in docker-compose or CLI)
+# Default command
 CMD ["bash"]

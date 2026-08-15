@@ -9,13 +9,13 @@ The architecture follows a event-driven serverless pattern:
 .. mermaid::
 
   flowchart TD
-    subgraph IAM_Sources["IAM Activity Sources"]
+    subgraph IAM_Events["IAM Activity Sources"]
         A1["IAM Users / Admins"]
         A2["Automated CI/CD Pipelines"]
-        A3["Privilege Escalation Events"]
+        A3["Attacker / Compromised Key"]
     end
 
-    subgraph AWS_Account["AWS Infrastructure"]
+    subgraph AWS_Account["AWS Account / Organization"]
         B["AWS CloudTrail<br/><i>(Management Event Capture)</i>"]
         C["Amazon EventBridge<br/><i>(IAM API Event Rule Filter)</i>"]
 
@@ -23,7 +23,7 @@ The architecture follows a event-driven serverless pattern:
             D["AWS Lambda (Python 3.11)<br/><i>(Event Parser & Risk Analyzer)</i>"]
         end
 
-        subgraph Output_Layer["Response Layer"]
+        subgraph Output_Layer["Response & Storage Layer"]
             E["Amazon SNS<br/><i>(Security Alert Topic & Email)</i>"]
             F["Amazon S3 Audit Bucket<br/><i>(JSON Audit Log Archival)</i>"]
             G["Amazon CloudWatch<br/><i>(Logs, Metrics & Alarms)</i>"]
@@ -34,12 +34,17 @@ The architecture follows a event-driven serverless pattern:
     A2 --> B
     A3 --> B
 
-    B --> C
-    C --> D
+    B -->|Log Events| C
+    C -->|Trigger| D
 
-    D --> E
-    D --> F
-    D --> G
+    D -->|Publish High Risk| E
+    D -->|Store JSON| F
+    D -->|Put Metrics & Logs| G
+
+    classDef aws fill:#FF9900,color:#fff,stroke:#232F3E,stroke-width:2px;
+    classDef service fill:#232F3E,color:#fff,stroke:#FF9900,stroke-width:2px;
+    class B,C,D aws;
+    class E,F,G service;
 
 AWS Services & Responsibilities
 -------------------------------
@@ -48,7 +53,7 @@ AWS Services & Responsibilities
 * **AWS CloudTrail**: Captures management events and API calls across the account.
 * **Amazon EventBridge**: Evaluates CloudTrail events against IAM pattern filters and invokes Lambda.
 * **Amazon SNS**: Topic, topic policy, and subscription manager for security alert emails.
-* **AWS Lambda**: Python 3.11 handler that analyzes risk, logs JSON audit records to S3, publishes alerts to SNS, and emits metrics to CloudWatch.
+* **AWS Lambda**: Python 3.11 handler that performs IP source validation, analyzes risk, logs JSON audit records to S3, publishes alerts to SNS, and emits metrics to CloudWatch.
 * **Amazon S3**: Server-side encrypted storage (AES-256) for audit trails and CloudTrail logs.
 * **Amazon CloudWatch**: Log group retention management and custom metrics (``AWSIAMMonitor``).
 

@@ -17,8 +17,6 @@
 
 </div>
 
----
-
 ## Overview
 
 **aws-iam-monitor** is a production-ready, serverless AWS security solution designed to provide continuous, real-time visibility into Identity and Access Management (IAM) changes across AWS accounts and AWS Organizations.
@@ -31,19 +29,16 @@ IAM Action ──► CloudTrail ──► EventBridge ──► Lambda ──►
                                                       └─► CloudWatch Metrics
 ```
 
----
-
 ## Key Features
 
 - **Real-time Event Detection**: Instant detection of sensitive IAM operations (e.g. `CreateUser`, `DeletePolicy`, `CreateAccessKey`, `DeactivateMFADevice`, `AttachUserPolicy`).
+- **IP Whitelisting & Enforcement**: Automated generation of `IPWhitelistPolicy` and real-time source IP validation within the monitoring Lambda.
 - **Risk Classification**: Automated risk grading (`CRITICAL`, `HIGH`, `MEDIUM`, `LOW`) for every IAM API call.
 - **Dedicated SNS Management Component**: Dedicated `sns` module with automated email alert subscriptions via `.env` or CLI parameters.
 - **Audit Trail Archiving**: Every IAM event is saved as a structured JSON record in Amazon S3 grouped by date (`YYYY/MM/DD/`).
 - **CloudWatch Metrics**: Emits custom `AWSIAMMonitor` metrics for CloudWatch dashboards and alarm creation.
 - **Idempotent Infrastructure**: CLI tooling (`awsctl`) creates, updates, and deletes resources safely without duplicate creation.
 - **Zero External Dependencies**: Operates purely using standard Bash, Python 3, and official AWS CLI v2 without runtime third-party dependencies.
-
----
 
 ## Architecture Flow
 
@@ -87,8 +82,6 @@ flowchart TD
     class E,F,G service;
 ```
 
----
-
 ## AWS Services Used
 
 | AWS Service            | Purpose                                                                             |
@@ -101,70 +94,37 @@ flowchart TD
 | **Amazon S3**          | Server-side encrypted storage for CloudTrail logs and historical IAM audit records. |
 | **Amazon CloudWatch**  | Log Group retention management, metric emission, and alarm monitoring.              |
 
----
-
 ## Repository Structure
 
 ```
 aws-iam-monitor/
-├── Makefile                        # Project build, lint, and test tasks
-├── README.md                       # Comprehensive documentation
+├── Makefile
+├── README.md
 ├── project/
-│   ├── .env                        # Environment configuration (SNS_ALERT_EMAIL, etc.)
-│   ├── .env.example                # Configuration template
+│   ├── .env                        # Environment configuration
+│   ├── .env.example                # Environment configuration template
 │   ├── awsctl                      # Primary orchestration CLI binary
-│   ├── lib/
-│   │   ├── common                  # Shared helper library (ARN build, state polling, env loader)
-│   │   ├── logger                  # Colorized logging module (INFO, SUCCESS, ERROR, etc.)
-│   │   └── requirements            # CLI prerequisite checker
-│   ├── iam/
-│   │   ├── policies/               # IAM policy JSON definitions
-│   │   ├── res/                    # IAM CSV definitions (users, groups, roles)
-│   │   └── src/
-│   │       ├── iamctl              # IAM environment orchestrator
-│   │       ├── policy_ctl          # Customer policy management script
-│   │       ├── group_ctl           # IAM group management script
-│   │       ├── role_ctl            # IAM role management script
-│   │       └── user_ctl            # IAM user management script
-│   ├── cloud-trail/
-│   │   ├── policies/               # CloudTrail & bucket policy templates
-│   │   └── src/
-│   │       ├── cloud_trail_ctl     # CloudTrail trail management script
-│   │       └── s3_bucket_ctl       # S3 bucket lifecycle & encryption script
-│   ├── sns/
-│   │   ├── policies/               # SNS topic policy templates
-│   │   ├── test/                   # SNS test scripts
-│   │   └── src/
-│   │       └── sns_ctl             # SNS alert topic & subscription management script
-│   ├── event-bridge/
-│   │   ├── policies/               # Event pattern JSON definition
-│   │   ├── test/                   # Automated test scripts
-│   │   └── src/
-│   │       └── event_bridge_ctl    # EventBridge rule & target wiring script
-│   └── lambda/
-│       ├── build/                  # Generated zip output directory
-│       ├── policies/               # Lambda execution policy & trust policy
-│       ├── test/                   # Lambda automated test scripts
-│       └── src/
-│           ├── lambda_ctl          # Lambda deployment & packaging script
-│           └── lambda_function.py  # Python monitoring handler
+│   ├── lib/                        # Shared helper library
+│   ├── iam/                        # IAM module
+│   ├── cloud-trail/                # CloudTrail module
+│   ├── sns/                        # SNS module
+│   ├── event-bridge/               # EventBridge module
+│   └── lambda/                     # Lambda module
 └── res/                            # Documentation assets & logos
 ```
-
----
 
 ## Prerequisites & Installation
 
 ### Requirements
 
 - **Operating System**: Linux / macOS
-- **Shell**: Bash v4.0+
+- **Shell**: Bash v5.0+
 - **Tools**:
   - `aws-cli` (v2.0+)
   - `jq` (v1.6+)
-  - `sed`
-  - `zip`
-  - `openssl`
+  - `sed` (v4.10+)
+  - `zip` (v3.0+)
+  - `openssl` (v3.6+)
   - `python3` (v3.11+)
 
 ### Installation & Configuration
@@ -176,7 +136,7 @@ cd aws-iam-monitor/project
 
 # Configure environment variables (optional: set SNS email alert recipient)
 cp .env.example .env
-nano .env  # Set SNS_ALERT_EMAIL=security-team@example.com
+nano .env  # Set SNS_ALERT_EMAIL=security-team@example.com, ALLOWED_IPS=1.2.3.4/32,5.6.7.8/24
 
 # Ensure CLI executable permissions
 chmod +x awsctl \
@@ -193,8 +153,6 @@ chmod +x awsctl \
 # Verify AWS CLI authentication
 aws sts get-caller-identity
 ```
-
----
 
 ## CLI Usage (`awsctl`)
 
@@ -227,8 +185,6 @@ The primary orchestration tool is `./awsctl`. It provides a unified command line
 - `-r`, `--role` : Include optional IAM roles during IAM setup.
 - `-v`, `--verbose` : Display detailed AWS CLI execution logs.
 - `-h`, `--help` : Show help message.
-
----
 
 ## Deployment Examples
 
@@ -270,8 +226,6 @@ _This will automatically:_
 ./awsctl --down all
 ```
 
----
-
 ## Security Considerations
 
 - **Least Privilege Access**: All IAM execution policies are scoped strictly to necessary permissions.
@@ -279,13 +233,9 @@ _This will automatically:_
 - **Zero Hardcoded Credentials**: No AWS access keys or secrets are stored in code or configuration files. Credentials are read directly from the environment or AWS CLI profile.
 - **Idempotency**: Resources are safely checked before creation or deletion to prevent unintended service disruptions.
 
----
-
 ## License
 
 This project is licensed under the **Apache-2.0 License**. See the [LICENSE](LICENSE) file for details.
-
----
 
 ## Contact & Support
 

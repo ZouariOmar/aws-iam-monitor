@@ -74,7 +74,7 @@
 #   Version     : 2.0
 #   Author      : @ZouariOmar (zouariomar20@gmail.com)
 #   Created     : 20/07/2026
-#   Updated     : 03/08/2026
+#   Updated     : 11/08/2026
 #
 # shellcheck disable=SC1090,SC1091
 # =========================================
@@ -113,6 +113,11 @@ AUDIT_BUCKET=""
 SNS_TOPIC_ARN=""
 ACTION=""
 VERBOSE="${VERBOSE:-false}"
+SKIP_SNS=false
+
+# Comma-separated trusted CIDR ranges for Lambda IP whitelist enforcement.
+# Sourced from the environment (loaded from .env by awsctl or the shell).
+ALLOWED_IPS="${ALLOWED_IPS:-}"
 
 ######################
 ### !CONFIGURATION ###
@@ -150,6 +155,7 @@ $(msg "OPTIONS:")
   --policy-name   <name>   IAM policy name (default: LambdaExecutionPolicy).
   --audit-bucket  <name>   Audit S3 bucket name.
   --sns-topic-name <name>  SNS topic name (default: iam-alerts).
+  --skip-sns               Skip SNS topic provisioning/teardown (used by orchestrator).
   -v, --verbose            Enable verbose execution output.
   -h, --help               Show this help message.
 
@@ -238,7 +244,12 @@ create_lambda() {
   local role_arn
   role_arn=$(build_arn iam "" "$AWS_ACCOUNT_ID" "role/${LAMBDA_ROLE_NAME}")
 
-  local env_vars="Variables={AUDIT_BUCKET=${AUDIT_BUCKET},SNS_TOPIC_ARN=${SNS_TOPIC_ARN}}"
+  local env_vars
+  env_vars=$(jq -c -n \
+    --arg audit "${AUDIT_BUCKET}" \
+    --arg sns "${SNS_TOPIC_ARN}" \
+    --arg ips "${ALLOWED_IPS:-}" \
+    '{"Variables": {"AUDIT_BUCKET": $audit, "SNS_TOPIC_ARN": $sns, "ALLOWED_IPS": $ips}}')
 
   msg INFO "Checking Lambda function state..."
 
@@ -255,15 +266,19 @@ create_lambda() {
       --query 'Configuration.CodeSha256' \
       --output text 2>/dev/null || echo "")
 
-    msg INFO "Updating Lambda configuration..."
-    aws lambda update-function-configuration \
+    local err
+    if ! err=$(aws lambda update-function-configuration \
       --function-name "$LAMBDA_FUNCTION_NAME" \
       --runtime "$LAMBDA_RUNTIME" \
       --handler "$LAMBDA_HANDLER" \
       --role "$role_arn" \
       --timeout 15 \
       --environment "$env_vars" \
-      --region "$AWS_REGION" >/dev/null
+      --region "$AWS_REGION" 2>&1); then
+      msg ERROR "Failed to update Lambda configuration for '$LAMBDA_FUNCTION_NAME'"
+      msg ERROR "$err"
+      exit 1
+    fi
 
     msg SUCCESS "Lambda configuration updated"
 
@@ -285,19 +300,45 @@ create_lambda() {
   else
     msg INFO "Lambda does not exist. Creating function..."
 
-    local err
-    if ! err=$(aws lambda create-function \
-      --function-name "$LAMBDA_FUNCTION_NAME" \
-      --runtime "$LAMBDA_RUNTIME" \
-      --handler "$LAMBDA_HANDLER" \
-      --role "$role_arn" \
-      --timeout 15 \
-      --zip-file "fileb://${LAMBDA_ZIP_FILE}" \
-      --environment "$env_vars" \
-      --region "$AWS_REGION" \
-      --output json 2>&1); then
-      msg ERROR "Failed to create Lambda function '$LAMBDA_FUNCTION_NAME'"
-      [[ "${VERBOSE:-false}" == true ]] && msg DEBUG "$err"
+    # IAM roles have eventual consistency — retry creation for up to 60s
+    # to handle the "cannot be assumed by Lambda" propagation delay.
+    local max_attempts=6
+    local attempt=0
+    local err=""
+    local created=false
+
+    while [[ $attempt -lt $max_attempts ]]; do
+      attempt=$((attempt + 1))
+      err=""
+
+      if err=$(aws lambda create-function \
+        --function-name "$LAMBDA_FUNCTION_NAME" \
+        --runtime "$LAMBDA_RUNTIME" \
+        --handler "$LAMBDA_HANDLER" \
+        --role "$role_arn" \
+        --timeout 15 \
+        --zip-file "fileb://${LAMBDA_ZIP_FILE}" \
+        --environment "$env_vars" \
+        --region "$AWS_REGION" \
+        --output json 2>&1); then
+        created=true
+        break
+      fi
+
+      if echo "$err" | grep -q "cannot be assumed"; then
+        msg WARNING "IAM role not yet propagated — retrying in 10s (attempt ${attempt}/${max_attempts})..."
+        sleep 10
+      else
+        # Non-retryable error
+        msg ERROR "Failed to create Lambda function '$LAMBDA_FUNCTION_NAME'"
+        msg ERROR "$err"
+        exit 1
+      fi
+    done
+
+    if [[ "$created" == false ]]; then
+      msg ERROR "Failed to create Lambda function '$LAMBDA_FUNCTION_NAME' after ${max_attempts} attempts"
+      msg ERROR "$err"
       exit 1
     fi
 
@@ -453,6 +494,10 @@ main() {
       SNS_TOPIC_NAME="$2"
       shift 2
       ;;
+    --skip-sns)
+      SKIP_SNS=true
+      shift
+      ;;
     -v | --verbose)
       VERBOSE=true
       shift
@@ -475,8 +520,8 @@ main() {
   local args=()
   [[ "${VERBOSE:-false}" == true ]] && args+=(--verbose)
 
-  # Provision / Teardown SNS Topic via sns_ctl
-  if [[ "${ACTION:-}" == "--up" || "${ACTION:-}" == "--down" ]]; then
+  # Provision / Teardown SNS Topic via sns_ctl (unless --skip-sns is passed)
+  if [[ ("${ACTION:-}" == "--up" || "${ACTION:-}" == "--down") && "${SKIP_SNS:-false}" == false ]]; then
     require_variable AWS_ACCOUNT_ID
 
     msg INFO "Managing SNS topic via sns_ctl ($ACTION)..."
@@ -485,6 +530,10 @@ main() {
       --aws-region "$AWS_REGION" \
       --topic-name "$SNS_TOPIC_NAME" \
       "${args[@]}"
+  fi
+
+  if [[ "${ACTION:-}" == "--up" || "${ACTION:-}" == "--down" ]]; then
+    require_variable AWS_ACCOUNT_ID
 
     msg INFO "Managing Lambda IAM policy and role ($ACTION)..."
 
