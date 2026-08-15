@@ -4,32 +4,35 @@
 
 # ----- Project configuration -----
 PROJECT_NAME    ?= aws-iam-monitor## Project name
-BUILD_DIR       ?= build## Build output directory
-SRC_DIR         ?= src## Source code directory
+SRC_DIR         ?= project## Source code directory
 VERSION_FILE    ?= VERSION## File storing current version
 PROJECT_VERSION ?= $(shell cat $(VERSION_FILE)) ## Current project version (read from VERSION file)
 DOCAPI_DIR      ?= docapi## Project api Documentention
+IMAGE_NAME      ?= aws-iam-monitor## Docker image name
+CONTAINER_NAME  ?= aws-iam-monitor## Docker container name
+DOCKERFILE      ?= Dockerfile## Docker file
+ENV_FILE        ?= $(SRC_DIR)/.env## Environment file
 
 # Commands
-BUILD_CMD        ?= echo "No build step configured"                                ## Build command
-RUN_CMD          ?= echo "No run step configured"                                  ## Run command
-TEST_CMD         ?= echo "No tests configured"                                     ## Test command
-LINT_CMD         ?= echo "No lint configured"                                      ## Lint command
-FORMAT_CMD       ?= echo "No formatter configured"                                 ## Format command
-DOCS_CMD         ?= make -C $(DOCAPI_DIR)                                          ## Docs generation command
-DOCS_SERVE_CMD   ?= cd "$(DOCAPI_DIR)/build/html" && python -m http.server 8000    ## Serve docs commmand
-DOCS_DEPLOY_CMD  ?= vercel --prod $(DOCAPI_DIR)/build/html                         ## Deploy docs command
-DOCS_PREVIEW_CMD ?= vercel $(DOCAPI_DIR)/build/html                                ## Preview docs command
-CHANGELOG_CMD    ?= git cliff -o CHANGELOG.md                                      ## Changelog command
-INIT_CMD         ?= uv venv .venv                                                  ## Init command
-SYNC_CMD         ?= uv sync                                                        ## Sync command
-
-# Docker
-DOCKER_IMAGE ?= $(PROJECT_NAME):latest ## Docker image name
+RUN_CMD          ?= cd $(SRC_DIR) && ./awsctl                                     ## Run command
+TEST_CMD         ?= cd $(SRC_DIR) && ./awsctl --test                              ## Test command
+DOCS_CMD         ?= make -C $(DOCAPI_DIR)                                         ## Docs generation command
+DOCS_SERVE_CMD   ?= cd "$(DOCAPI_DIR)/build/html" && python -m http.server 8000   ## Serve docs commmand
+DOCS_DEPLOY_CMD  ?= vercel --prod $(DOCAPI_DIR)/build/html                        ## Deploy docs command
+DOCS_PREVIEW_CMD ?= vercel $(DOCAPI_DIR)/build/html                               ## Preview docs command
+CHANGELOG_CMD    ?= git cliff -o CHANGELOG.md                                     ## Changelog command
+INIT_CMD         ?= uv venv .venv                                                 ## Init command
+SYNC_CMD         ?= uv sync                                                       ## Sync command
+CLEAN_CMD        ?= rm -rf .venv $(DOCAPI_DIR)/build uv.lock *.egg-info                                     ## Clean commmand
+DOCKER_BUILD_CMD ?= docker build -f $(DOCKERFILE) -t $(IMAGE_NAME) .                                        ## Doocker build command
+DOCKER_BASH_CMD  ?= docker run --rm -it --name $(CONTAINER_NAME) --env-file $(ENV_FILE) $(IMAGE_NAME) bash  ## Docker bash commmand
+DOCKER_RUN_CMD   ?= docker run --rm --name $(CONTAINER_NAME) --env-file $(ENV_FILE) $(IMAGE_NAME)           ## Docker run commmand
+DOCKER_STOP_CMD  ?= docker stop $(CONTAINER_NAME)                                                           ## Docker stop commmand
+DOCKER_CLEAN_CMD ?= docker rmi $(IMAGE_NAME)                                                                ## Docker clean commmand
 
 # Shell settings
 SHELL         := /bin/bash
-.DEFAULT_GOAL := help
+.DEFAULT_GOAL := all
 
 # Colors
 GREEN  := \033[0;32m
@@ -42,7 +45,7 @@ NC     := \033[0m
 # =========================================================
 
 .PHONY: all
-all: init
+all: init sync run
 
 .PHONY: help
 help:
@@ -81,11 +84,6 @@ sync: ## Sync the project
 	@$(SYNC_CMD)
 	$(call print_venv)
 
-.PHONY: build
-build: ## Build the project
-	$(call print_title,Building $(PROJECT_NAME)...)
-	@$(BUILD_CMD)
-
 .PHONY: run
 run: ## Run the project
 	$(call print_title,Running $(PROJECT_NAME))
@@ -95,16 +93,6 @@ run: ## Run the project
 test: ## Run project tests
 	$(call print_title,Testing $(PROJECT_NAME))
 	@$(TEST_CMD)
-
-.PHONY: lint
-lint: ## Lint the project
-	$(call print_title,Linting $(PROJECT_NAME))
-	@$(LINT_CMD)
-
-.PHONY: format
-format: ## Fromat the project
-	$(call print_title,Formatting $(PROJECT_NAME))
-	@$(FORMAT_CMD)
 
 .PHONY: docs
 docs: docs-html ## Document the project to html
@@ -131,29 +119,40 @@ docs-%: ## Document the project
 .PHONY: clean
 clean: ## Clean the project
 	$(call print_title,Cleaning...)
-	@rm -rf $(BUILD_DIR)
-
-.PHONY: docker
-docker: ## Make docker image
-	$(call print_title,Building docker image...)
-	@docker build -t $(DOCKER_IMAGE) .
-
-.PHONY: docker-up
-docker-up: ## Docker composer up
-	docker compose up --build
-
-.PHONY: docker-down
-docker-down: ## Docker composer down
-	docker compose down
+	@$(CLEAN_CMD)
 
 .PHONY: changelog
 changelog: ## Make project changelog
 	$(call print_title,Generating changelog...)
 	@$(CHANGELOG_CMD)
 
-.PHONY: release
-release: format lint test build ## Make project release
-	$(call print_title,Release pipeline complete)
+.PHONY: docker
+docker: docker-build docker-run docker-bash
+
+.PHONY: docker-build
+docker-build: ## Build the Docker image
+	@$(call print_title,Build docker image...)
+	@$(DOCKER_BUILD_CMD)
+
+.PHONY: docker-bash
+docker-bash: ## Open a bash shell inside the Docker container
+	@$(call print_title,Open docker container bash...)
+	@$(DOCKER_BASH_CMD)
+
+.PHONY: docker-run
+docker-run: ## Run awsctl inside Docker
+	@$(call print_title,Run docker container...)
+	@$(DOCKER_RUN_CMD)
+
+.PHONY: docker-stop
+docker-stop: ## Stop the Docker container
+	@$(call print_title,Stop docker container...)
+	@$(DOCKER_STOP_CMD) || true
+
+.PHONY: docker-clean
+docker-clean: ## Remove the Docker image
+	@$(call print_title,Remove docker image...)
+	@$(DOCKER_CLEAN_CMD) || true
 
 # =========================================================
 # Environment
