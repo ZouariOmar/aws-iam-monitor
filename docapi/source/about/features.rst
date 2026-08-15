@@ -8,6 +8,14 @@ Real-time Security Monitoring
 * **Risk Categorization**: Classifies 25+ IAM API actions into `CRITICAL`, `HIGH`, `MEDIUM`, and `LOW` risk tiers.
 * **Actor & Target Attribution**: Extracts event user identity, target resource, source IP address, AWS region, and account ID.
 
+IP Whitelisting & Enforcement
+-----------------------------
+
+* **Automated Policy Generation**: ``iamctl`` automatically generates an ``IPWhitelistPolicy`` JSON definition based on the ``ALLOWED_IPS`` environment variable.
+* **Proactive Blocking**: Denies any IAM activity originating from non-whitelisted IP addresses (when the policy is attached to users or groups).
+* **Lambda-level Validation**: The monitoring Lambda performs real-time checks against trusted CIDRs and triggers alerts for unauthorized IP access.
+* **Bypass Detection**: Emits ``UnauthorizedIPAccess`` metrics for tracking attempts from blocked addresses.
+
 Automated Alerts & Storage
 --------------------------
 

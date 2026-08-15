@@ -59,6 +59,13 @@ Least Privilege
 * Cross-account access should use read-only roles whenever possible.
 * AWS STS AssumeRole is recommended for organization-wide deployments.
 
+IP Whitelisting
+^^^^^^^^^^^^^^^
+
+* The system supports automated ``IPWhitelistPolicy`` generation to restrict IAM actions to trusted networks.
+* Continuous monitoring validates the source IP of every IAM event against a pre-configured ``ALLOWED_IPS`` list.
+* Unauthorized access attempts from blocked IPs trigger high-priority alerts and custom CloudWatch metrics.
+
 Secure AWS Integrations
 ^^^^^^^^^^^^^^^^^^^^^^^
 

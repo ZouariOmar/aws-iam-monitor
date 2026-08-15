@@ -7,15 +7,16 @@ Prerequisites
 Before deploying **aws-iam-monitor**, ensure your environment meets the following requirements:
 
 * **Operating System**: Linux / macOS
-* **Shell**: Bash v4.0+
-* **System Utilities**:
-  * ``aws-cli`` (v2.0+)
-  * ``jq`` (v1.6+)
-  * ``sed``
-  * ``zip``
-  * ``openssl``
-  * ``python3`` (v3.11+)
+* **Shell**: Bash v5.0+
+* **Tools**:
+  * `aws-cli` (v2.0+)
+  * `jq` (v1.6+)
+  * `sed` (v4.10+)
+  * `zip` (v3.0+)
+  * `openssl` (v3.6+)
+  * `python3` (v3.11+)
 * **AWS Account Access**: Credentials with administrative permissions to manage IAM, CloudTrail, EventBridge, Lambda, SNS, S3, and CloudWatch.
+
 
 Repository Setup
 ----------------
@@ -67,6 +68,9 @@ Edit ``.env`` to specify your security alert recipient email:
 
   # EventBridge Rule Configuration
   RULE_NAME=aws-iam-monitor-rule
+
+  # IP Whitelisting (Comma-separated CIDR ranges)
+  ALLOWED_IPS=192.168.1.0/24,203.0.113.5/32
 
 AWS Authentication Verification
 -------------------------------

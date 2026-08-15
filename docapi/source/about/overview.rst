@@ -13,6 +13,7 @@ The platform categorizes IAM operations into distinct risk severity levels:
 * **CRITICAL Risk**:
   * ``DeletePolicy``, ``DeleteRolePolicy``, ``DeleteGroupPolicy``, ``DeleteUserPolicy``
   * ``DeactivateMFADevice``, ``DeleteVirtualMFADevice``
+  * **Unauthorized IP Access**: Activity originating from a non-whitelisted source IP.
 
 * **HIGH Risk**:
   * ``CreateAccessKey``, ``CreateUser``, ``DeleteUser``

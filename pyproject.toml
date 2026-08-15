@@ -1,7 +1,7 @@
 [project]
 name = "aws-iam-monitor"
 
-version = "0.1.0"
+version = "1.1.0"
 
 description = "Monitor, Audit, Protect, Real-time visibility into AWS IAM changes and access control activity"
 
