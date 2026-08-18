@@ -4,8 +4,28 @@
 
 ### CUSTOM IGNORES ###
 *.venv/
-*/.env*
+# Matches at any depth (was `*/.env*`, which stopped matching
+# project/bash/.env once the Bash implementation moved one directory
+# deeper — use **/ so this survives future reorganizations too).
+**/.env*
+# ...but .env.example templates are meant to be committed.
+!**/.env.example
 build/
 *.egg-info/
 *.lock
 __pycache__
+
+### TERRAFORM ###
+**/.terraform/
+*.tfstate
+*.tfstate.*
+crash*.log
+override.tf*
+*_override.tf*
+*.tfvars
+*.tfvars.json
+!terraform.tfvars.example
+*.tfplan
+# Note: .terraform.lock.hcl (provider version lock file) is intentionally NOT
+# ignored here — it must be committed for reproducible `terraform init` across
+# machines/CI. It isn't matched by the `*.lock` rule above (different extension).
