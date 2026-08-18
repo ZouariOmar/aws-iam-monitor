@@ -1,0 +1,412 @@
+#!/usr/bin/env bash
+# =========================================
+# FILE
+#   cloud-trail/src/s3_bucket_ctl
+#
+# SYNOPSIS
+#   Amazon S3 bucket lifecycle management for CloudTrail.
+#
+# DESCRIPTION
+#   Creates, configures, monitors, and removes an Amazon S3
+#   bucket used by AWS CloudTrail for IAM audit log storage.
+#
+#   Lifecycle operations:
+#     --up      Create the bucket (idempotent), enable default
+#               server-side encryption, enable versioning for
+#               audit integrity, and apply the CloudTrail
+#               bucket policy.
+#     --down    Remove the bucket policy, remove encryption,
+#               delete all versioned and non-versioned objects,
+#               then delete the bucket.
+#     --status  Report bucket existence, location, encryption,
+#               and policy status.
+#
+# USAGE
+#   ./s3_bucket_ctl --up   --bucket-name <name> --aws-account-id <id> \
+#                          --aws-region <region> [OPTIONS]
+#   ./s3_bucket_ctl --down --bucket-name <name> [OPTIONS]
+#   ./s3_bucket_ctl --status --bucket-name <name> [OPTIONS]
+#
+# OPTIONS
+#   --up | --down | --status            Lifecycle action (required).
+#   --bucket-name  <name>               S3 bucket name (required).
+#   --aws-account-id <id>               AWS account ID (required for --up).
+#   --aws-region   <region>             AWS region (required for --up).
+#   --bucket-encryption-sse-algorithm   SSE algorithm. Default: AES256.
+#   -v, --verbose                       Enable verbose output.
+#   -h, --help                          Show this help.
+#
+# EXAMPLES
+#   Create a bucket:
+#     ./s3_bucket_ctl --up \
+#       --bucket-name aws-cloudtrail-logs-123456789012 \
+#       --aws-account-id 123456789012 \
+#       --aws-region us-east-1
+#
+#   Check status:
+#     ./s3_bucket_ctl --status \
+#       --bucket-name aws-cloudtrail-logs-123456789012
+#
+#   Delete a bucket:
+#     ./s3_bucket_ctl --down \
+#       --bucket-name aws-cloudtrail-logs-123456789012
+#
+# DEPENDENCIES
+#   AWS CLI v2, sed
+#
+# REQUIRED IAM PERMISSIONS
+#   s3:CreateBucket       s3:HeadBucket         s3:DeleteBucket
+#   s3:PutBucketPolicy    s3:GetBucketPolicy     s3:DeleteBucketPolicy
+#   s3:PutEncryptionConfiguration
+#   s3:GetEncryptionConfiguration
+#   s3:DeleteBucketEncryption
+#   s3:PutBucketVersioning
+#   s3:GetBucketVersioning
+#   s3:GetBucketLocation
+#   s3:DeleteObject       s3:ListBucketVersions
+#
+# EXIT CODES
+#   0   Success
+#   1   Error
+#
+# NOTES
+#   Project     : aws-iam-monitor
+#   Version     : 2.0
+#   Author      : @ZouariOmar (zouariomar20@gmail.com)
+#   Created     : 20/07/2026
+#   Updated     : 03/08/2026
+#
+# shellcheck disable=SC1090,SC1091
+# =========================================
+set -Eeuo pipefail
+
+#####################
+### CONFIGURATION ###
+#####################
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+LIB_DIR="${LIB_DIR:-${SCRIPT_DIR}/../../lib}"
+
+CLOUD_TRAIL_POLICIES_DIR="${SCRIPT_DIR}/../policies"
+
+# Policy templates.
+BUCKET_POLICY_FILE="${CLOUD_TRAIL_POLICIES_DIR}/bucket-policy.json"
+BUCKET_ENCRYPTION_FILE="${CLOUD_TRAIL_POLICIES_DIR}/bucket-encryption.json"
+
+# Defaults.
+BUCKET_NAME=""
+AWS_ACCOUNT_ID=""
+AWS_REGION=""
+BUCKET_ENCRYPTION_SSE_ALGORITHM="AES256"
+ACTION=""
+VERBOSE="${VERBOSE:-false}"
+
+######################
+### !CONFIGURATION ###
+######################
+
+usage() {
+  cat <<EOF
+$(msg "USAGE:")
+
+  $(basename "$0") --up     --bucket-name <name> --aws-account-id <id> \\
+                            --aws-region <region> [OPTIONS]
+  $(basename "$0") --down   --bucket-name <name> [OPTIONS]
+  $(basename "$0") --status --bucket-name <name> [OPTIONS]
+
+
+$(msg "ACTIONS:")
+
+  --up
+      Create and configure the S3 bucket.
+      Enables encryption and versioning.
+      Applies the CloudTrail bucket policy.
+
+  --down
+      Remove bucket policy, delete all objects (including
+      versions), and delete the bucket.
+
+  --status
+      Report bucket location, encryption, and policy status.
+
+
+$(msg "OPTIONS:")
+
+  --bucket-name  <name>              S3 bucket name.
+  --aws-account-id <id>              AWS account ID.
+  --aws-region   <region>            AWS region.
+  --bucket-encryption-sse-algorithm  SSE algorithm (default: AES256).
+  -v, --verbose                      Enable verbose output.
+  -h, --help                         Show this help.
+
+
+$(msg "EXAMPLES:")
+
+  Create a bucket:
+    $(basename "$0") --up \\
+      --bucket-name aws-cloudtrail-logs-123456789012 \\
+      --aws-account-id 123456789012 \\
+      --aws-region us-east-1
+
+  Check status:
+    $(basename "$0") --status \\
+      --bucket-name aws-cloudtrail-logs-123456789012
+
+  Delete a bucket:
+    $(basename "$0") --down \\
+      --bucket-name aws-cloudtrail-logs-123456789012
+EOF
+  exit 1
+}
+
+# ---------------------------------------------------------------------------
+# create_s3_bucket
+# ---------------------------------------------------------------------------
+create_s3_bucket() {
+  msg INFO "Creating S3 bucket: $BUCKET_NAME"
+
+  if aws s3api head-bucket --bucket "$BUCKET_NAME" &>/dev/null; then
+    msg INFO "Bucket already exists: $BUCKET_NAME"
+  else
+    msg INFO "Creating bucket..."
+
+    local err
+    # us-east-1 does NOT accept a LocationConstraint parameter.
+    if [[ "$AWS_REGION" == "us-east-1" ]]; then
+      if ! err=$(aws s3api create-bucket \
+        --bucket "$BUCKET_NAME" \
+        --region "$AWS_REGION" \
+        --output json 2>&1); then
+        msg ERROR "Failed to create bucket '$BUCKET_NAME'"
+        [[ "${VERBOSE:-false}" == true ]] && msg DEBUG "$err"
+        exit 1
+      fi
+    else
+      if ! err=$(aws s3api create-bucket \
+        --bucket "$BUCKET_NAME" \
+        --region "$AWS_REGION" \
+        --create-bucket-configuration "LocationConstraint=${AWS_REGION}" \
+        --output json 2>&1); then
+        msg ERROR "Failed to create bucket '$BUCKET_NAME'"
+        [[ "${VERBOSE:-false}" == true ]] && msg DEBUG "$err"
+        exit 1
+      fi
+    fi
+
+    msg SUCCESS "Bucket created: $BUCKET_NAME"
+  fi
+
+  # Enable default server-side encryption.
+  msg INFO "Configuring bucket encryption (${BUCKET_ENCRYPTION_SSE_ALGORITHM})..."
+
+  local enc_config
+  enc_config=$(sed "s/{{BUCKET_ENCRYPTION_SSE_ALGORITHM}}/${BUCKET_ENCRYPTION_SSE_ALGORITHM}/g" \
+    "$BUCKET_ENCRYPTION_FILE")
+
+  aws s3api put-bucket-encryption \
+    --bucket "$BUCKET_NAME" \
+    --server-side-encryption-configuration "$enc_config" >/dev/null
+
+  msg SUCCESS "Bucket encryption configured"
+
+  # Enable versioning for audit integrity.
+  msg INFO "Enabling bucket versioning..."
+
+  aws s3api put-bucket-versioning \
+    --bucket "$BUCKET_NAME" \
+    --versioning-configuration Status=Enabled >/dev/null
+
+  msg SUCCESS "Bucket versioning enabled"
+
+  # Apply CloudTrail bucket policy.
+  msg INFO "Configuring bucket policy..."
+
+  if aws s3api get-bucket-policy --bucket "$BUCKET_NAME" &>/dev/null; then
+    msg INFO "Bucket policy already exists"
+  else
+    local policy
+    policy=$(sed \
+      -e "s/{{AWS_ACCOUNT_ID}}/${AWS_ACCOUNT_ID}/g" \
+      -e "s/{{BUCKET_NAME}}/${BUCKET_NAME}/g" \
+      "$BUCKET_POLICY_FILE")
+
+    local err
+    if ! err=$(aws s3api put-bucket-policy \
+      --bucket "$BUCKET_NAME" \
+      --policy "$policy" 2>&1); then
+      msg ERROR "Failed to configure bucket policy"
+      [[ "${VERBOSE:-false}" == true ]] && msg DEBUG "$err"
+      exit 1
+    fi
+
+    msg SUCCESS "Bucket policy applied"
+  fi
+}
+
+# ---------------------------------------------------------------------------
+# delete_s3_bucket
+# ---------------------------------------------------------------------------
+delete_s3_bucket() {
+  msg INFO "Deleting S3 bucket: $BUCKET_NAME"
+
+  if ! aws s3api head-bucket --bucket "$BUCKET_NAME" &>/dev/null; then
+    msg INFO "Bucket does not exist — nothing to delete"
+    return 0
+  fi
+
+  # Remove bucket policy.
+  if aws s3api get-bucket-policy --bucket "$BUCKET_NAME" &>/dev/null; then
+    aws s3api delete-bucket-policy --bucket "$BUCKET_NAME" >/dev/null
+    [[ "${VERBOSE:-false}" == true ]] && msg DEBUG "Removed bucket policy"
+  fi
+
+  # Remove encryption configuration.
+  if aws s3api get-bucket-encryption --bucket "$BUCKET_NAME" &>/dev/null; then
+    aws s3api delete-bucket-encryption --bucket "$BUCKET_NAME" >/dev/null
+    [[ "${VERBOSE:-false}" == true ]] && msg DEBUG "Removed bucket encryption"
+  fi
+
+  # Delete all objects and versions.
+  msg INFO "Deleting all bucket objects (including versions)..."
+  aws s3 rm "s3://${BUCKET_NAME}" --recursive >/dev/null 2>&1 || true
+
+  # Delete any remaining versioned objects.
+  aws s3api list-object-versions \
+    --bucket "$BUCKET_NAME" \
+    --query '{Objects: Versions[].{Key:Key,VersionId:VersionId}}' \
+    --output json 2>/dev/null |
+    jq -r '.Objects[]? | "\(.Key) \(.VersionId)"' |
+    while IFS=' ' read -r key ver; do
+      [[ -z "$key" ]] && continue
+      aws s3api delete-object \
+        --bucket "$BUCKET_NAME" \
+        --key "$key" \
+        --version-id "$ver" >/dev/null 2>&1 || true
+    done
+
+  # Delete delete-markers.
+  aws s3api list-object-versions \
+    --bucket "$BUCKET_NAME" \
+    --query '{Objects: DeleteMarkers[].{Key:Key,VersionId:VersionId}}' \
+    --output json 2>/dev/null |
+    jq -r '.Objects[]? | "\(.Key) \(.VersionId)"' |
+    while IFS=' ' read -r key ver; do
+      [[ -z "$key" ]] && continue
+      aws s3api delete-object \
+        --bucket "$BUCKET_NAME" \
+        --key "$key" \
+        --version-id "$ver" >/dev/null 2>&1 || true
+    done
+
+  aws s3api delete-bucket --bucket "$BUCKET_NAME"
+
+  msg SUCCESS "S3 bucket deleted: $BUCKET_NAME"
+}
+
+# ---------------------------------------------------------------------------
+# s3_bucket_status
+# ---------------------------------------------------------------------------
+s3_bucket_status() {
+  msg INFO "Checking S3 bucket: $BUCKET_NAME"
+
+  local region_flag=()
+  [[ -n "$AWS_REGION" ]] && region_flag=(--region "$AWS_REGION")
+
+  if ! aws s3api head-bucket --bucket "$BUCKET_NAME" "${region_flag[@]}" &>/dev/null; then
+    msg WARNING "S3 bucket does not exist: $BUCKET_NAME"
+    return 0
+  fi
+
+  msg SUCCESS "S3 bucket exists: $BUCKET_NAME"
+
+  msg INFO "Location:"
+  aws s3api get-bucket-location --bucket "$BUCKET_NAME" "${region_flag[@]}" 2>/dev/null || true
+
+  msg INFO "Versioning:"
+  aws s3api get-bucket-versioning --bucket "$BUCKET_NAME" "${region_flag[@]}" 2>/dev/null || true
+
+  msg INFO "Encryption:"
+  aws s3api get-bucket-encryption --bucket "$BUCKET_NAME" "${region_flag[@]}" 2>/dev/null ||
+    msg WARNING "No encryption configured"
+
+  msg INFO "Bucket policy:"
+  aws s3api get-bucket-policy --bucket "$BUCKET_NAME" "${region_flag[@]}" 2>/dev/null ||
+    msg WARNING "No bucket policy configured"
+}
+
+# ---------------------------------------------------------------------------
+# main
+# ---------------------------------------------------------------------------
+main() {
+  while [[ $# -gt 0 ]]; do
+    case "$1" in
+    --up | --down | --status)
+      ACTION="$1"
+      shift
+      ;;
+    --bucket-name)
+      BUCKET_NAME="$2"
+      shift 2
+      ;;
+    --aws-account-id)
+      AWS_ACCOUNT_ID="$2"
+      shift 2
+      ;;
+    --aws-region)
+      AWS_REGION="$2"
+      shift 2
+      ;;
+    --bucket-encryption-sse-algorithm)
+      BUCKET_ENCRYPTION_SSE_ALGORITHM="$2"
+      shift 2
+      ;;
+    -v | --verbose)
+      VERBOSE=true
+      shift
+      ;;
+    -h | --help)
+      usage
+      ;;
+    *)
+      msg ERROR "Unknown option: $1"
+      usage
+      ;;
+    esac
+  done
+
+  require_variable BUCKET_NAME
+
+  case "${ACTION:-}" in
+  --up)
+    require_variable AWS_ACCOUNT_ID
+    require_variable AWS_REGION
+    create_s3_bucket
+    ;;
+  --down)
+    delete_s3_bucket
+    ;;
+  --status)
+    s3_bucket_status
+    ;;
+  *)
+    msg ERROR "Action required: --up, --down, or --status"
+    usage
+    ;;
+  esac
+}
+
+# ---------------------------------------------------------------------------
+# Bootstrap
+# ---------------------------------------------------------------------------
+if [[ -s "${LIB_DIR}/common" ]]; then
+  # shellcheck disable=SC1091
+  . "${LIB_DIR}/common"
+else
+  echo "[ERROR] Missing: ${LIB_DIR}/common" >&2
+  exit 1
+fi
+load_script "${LIB_DIR}/logger"
+
+trap 'msg ERROR "Unexpected error at line $LINENO: $BASH_COMMAND"' ERR
+
+main "$@"

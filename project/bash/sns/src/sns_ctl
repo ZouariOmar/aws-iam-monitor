@@ -1,0 +1,421 @@
+#!/usr/bin/env bash
+# =========================================
+# FILE
+#   sns/src/sns_ctl
+#
+# SYNOPSIS
+#   Amazon SNS topic lifecycle management.
+#
+# DESCRIPTION
+#   Creates, configures, monitors, tests, and removes Amazon SNS topics
+#   and subscriptions for security alert notifications.
+#
+#   Lifecycle operations:
+#     --up      Create the SNS topic (idempotent) and subscribe an email
+#               address for security alert notifications if provided in
+#               .env or via --email.
+#     --down    Delete all topic subscriptions and delete the SNS topic.
+#     --status  Report topic existence, ARN, topic attributes, and active
+#               subscriptions.
+#     --test    Run automated test scripts in sns/test/.
+#
+# USAGE
+#   ./sns_ctl --up   --aws-account-id <id> --aws-region <region> [OPTIONS]
+#   ./sns_ctl --down --aws-account-id <id> --aws-region <region> [OPTIONS]
+#   ./sns_ctl --status --aws-region <region> [OPTIONS]
+#   ./sns_ctl --test [OPTIONS]
+#
+# OPTIONS
+#   --up | --down | --status | --test   Lifecycle action (required).
+#   --aws-account-id <id>               AWS account ID.
+#   --aws-region   <region>             AWS region (required).
+#   --topic-name   <name>               SNS topic name (default: iam-alerts).
+#   --email        <address>            Email address to subscribe for security alerts.
+#   -v, --verbose                       Enable verbose execution output.
+#   -h, --help                          Show this help message.
+#
+# EXAMPLES
+#   Create SNS alert topic and subscribe email:
+#     ./sns_ctl --up \
+#       --aws-account-id 123456789012 \
+#       --aws-region us-east-1 \
+#       --email security@example.com
+#
+#   Check topic status:
+#     ./sns_ctl --status --aws-region us-east-1
+#
+#   Delete topic:
+#     ./sns_ctl --down \
+#       --aws-account-id 123456789012 \
+#       --aws-region us-east-1
+#
+# DEPENDENCIES
+#   AWS CLI v2, jq
+#
+# REQUIRED IAM PERMISSIONS
+#   sns:CreateTopic         sns:DeleteTopic         sns:GetTopicAttributes
+#   sns:ListTopics          sns:Subscribe           sns:Unsubscribe
+#   sns:ListSubscriptionsByTopic
+#
+# EXIT CODES
+#   0   Success
+#   1   Error
+#
+# NOTES
+#   Project     : aws-iam-monitor
+#   Version     : 2.0
+#   Author      : @ZouariOmar (zouariomar20@gmail.com)
+#   Created     : 03/08/2026
+#   Updated     : 03/08/2026
+#
+# shellcheck disable=SC1090,SC1091
+# =========================================
+set -Eeuo pipefail
+
+#####################
+### CONFIGURATION ###
+#####################
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+LIB_DIR="${LIB_DIR:-${SCRIPT_DIR}/../../lib}"
+
+SNS_POLICIES_DIR="${SCRIPT_DIR}/../policies"
+SNS_TEST_DIR="${SCRIPT_DIR}/../test"
+SNS_POLICY_FILE="${SNS_POLICIES_DIR}/sns-topic-policy.json"
+
+# Defaults
+AWS_ACCOUNT_ID="${AWS_ACCOUNT_ID:-}"
+AWS_REGION="${AWS_REGION:-}"
+TOPIC_NAME="${SNS_TOPIC_NAME:-iam-alerts}"
+ALERT_EMAIL="${SNS_ALERT_EMAIL:-}"
+ACTION=""
+VERBOSE="${VERBOSE:-false}"
+
+######################
+### !CONFIGURATION ###
+######################
+
+usage() {
+  cat <<EOF
+$(msg "USAGE:")
+
+  $(basename "$0") <--up|--down|--status|--test> --aws-region <region> [OPTIONS]
+
+
+$(msg "ACTIONS:")
+
+  --up
+      Create the SNS security alert topic and subscribe an email address
+      if provided.
+
+  --down
+      Remove topic subscriptions and delete the SNS topic.
+
+  --status
+      Display topic attributes and subscription details.
+
+  --test
+      Run automated tests in sns/test/.
+
+
+$(msg "OPTIONS:")
+
+  --aws-account-id <id>      AWS account ID.
+  --aws-region   <region>    AWS region.
+  --topic-name   <name>      SNS topic name (default: iam-alerts).
+  --email        <address>   Security alert subscription email address.
+  -v, --verbose              Enable verbose execution output.
+  -h, --help                 Show this help message.
+
+
+$(msg "EXAMPLES:")
+
+  Create topic and subscribe email:
+    $(basename "$0") --up --aws-account-id 123456789012 --aws-region us-east-1 --email sec@example.com
+
+  Check status:
+    $(basename "$0") --status --aws-region us-east-1
+
+  Delete topic:
+    $(basename "$0") --down --aws-account-id 123456789012 --aws-region us-east-1
+EOF
+  exit 1
+}
+
+# ---------------------------------------------------------------------------
+# create_sns_topic
+# ---------------------------------------------------------------------------
+create_sns_topic() {
+  msg INFO "Creating/configuring SNS topic: $TOPIC_NAME"
+
+  local topic_arn
+  topic_arn=$(aws sns create-topic \
+    --name "$TOPIC_NAME" \
+    --region "$AWS_REGION" \
+    --query 'TopicArn' \
+    --output text 2>/dev/null || echo "")
+
+  if [[ -z "$topic_arn" ]]; then
+    msg ERROR "Failed to create SNS topic '$TOPIC_NAME'"
+    exit 1
+  fi
+
+  msg SUCCESS "SNS topic created/verified: $topic_arn"
+
+  # Apply topic policy if policy template exists
+  if [[ -f "$SNS_POLICY_FILE" && -n "$AWS_ACCOUNT_ID" ]]; then
+    msg INFO "Applying SNS topic policy..."
+    local policy
+    policy=$(sed \
+      -e "s/{{AWS_ACCOUNT_ID}}/${AWS_ACCOUNT_ID}/g" \
+      -e "s/{{AWS_REGION}}/${AWS_REGION}/g" \
+      -e "s/{{SNS_TOPIC_NAME}}/${TOPIC_NAME}/g" \
+      "$SNS_POLICY_FILE")
+
+    aws sns set-topic-attributes \
+      --topic-arn "$topic_arn" \
+      --attribute-name Policy \
+      --attribute-value "$policy" \
+      --region "$AWS_REGION" >/dev/null 2>&1 || true
+
+    msg SUCCESS "SNS topic policy applied"
+  fi
+
+  # Subscribe email if provided
+  if [[ -n "$ALERT_EMAIL" ]]; then
+
+    # Check for a CONFIRMED subscription (SubscriptionArn is a real ARN, not "PendingConfirmation" or "Deleted")
+    local confirmed_sub
+    confirmed_sub=$(aws sns list-subscriptions-by-topic \
+      --topic-arn "$topic_arn" \
+      --region "$AWS_REGION" \
+      --query "Subscriptions[?Endpoint=='${ALERT_EMAIL}' && SubscriptionArn != 'PendingConfirmation' && SubscriptionArn != 'Deleted'].SubscriptionArn" \
+      --output text 2>/dev/null || echo "")
+
+    if [[ -n "$confirmed_sub" ]]; then
+      msg INFO "Email '$ALERT_EMAIL' already has a confirmed subscription — skipping"
+    else
+      msg INFO "Subscribing email '$ALERT_EMAIL' to SNS topic..."
+      local sub_arn
+      sub_arn=$(aws sns subscribe \
+        --topic-arn "$topic_arn" \
+        --protocol email \
+        --notification-endpoint "$ALERT_EMAIL" \
+        --region "$AWS_REGION" \
+        --query 'SubscriptionArn' \
+        --output text 2>/dev/null || echo "")
+
+      msg SUCCESS "Subscription initiated for '$ALERT_EMAIL' (ARN: ${sub_arn})"
+      msg WARNING "Please check '$ALERT_EMAIL' inbox and click 'Confirm subscription'"
+    fi
+  else
+    msg INFO "No email address provided for subscription (set SNS_ALERT_EMAIL in .env or pass --email)"
+  fi
+}
+
+# ---------------------------------------------------------------------------
+# delete_sns_topic
+# ---------------------------------------------------------------------------
+delete_sns_topic() {
+  local topic_arn
+  topic_arn=$(build_arn sns "$AWS_REGION" "$AWS_ACCOUNT_ID" "$TOPIC_NAME")
+
+  msg INFO "Deleting SNS topic: $TOPIC_NAME"
+
+  # Unsubscribe all subscribers first
+  local subs
+  subs=$(aws sns list-subscriptions-by-topic \
+    --topic-arn "$topic_arn" \
+    --region "$AWS_REGION" \
+    --query 'Subscriptions[].SubscriptionArn' \
+    --output text 2>/dev/null | tr '\t' '\n' || echo "")
+
+  while IFS= read -r sub_arn; do
+    [[ -z "$sub_arn" || "$sub_arn" == "PendingConfirmation" || "$sub_arn" == "Deleted" ]] && continue
+    aws sns unsubscribe --subscription-arn "$sub_arn" --region "$AWS_REGION" >/dev/null 2>&1 || true
+    if [[ "${VERBOSE:-false}" == true ]]; then
+      msg DEBUG "Unsubscribed: $sub_arn"
+    fi
+  done <<<"$subs"
+
+  aws sns delete-topic --topic-arn "$topic_arn" --region "$AWS_REGION" >/dev/null 2>&1 || true
+
+  msg SUCCESS "SNS topic deleted: $TOPIC_NAME"
+}
+
+# ---------------------------------------------------------------------------
+# sns_status
+# ---------------------------------------------------------------------------
+sns_status() {
+  msg INFO "Checking SNS topic status: $TOPIC_NAME"
+
+  local topic_arn
+  if [[ -n "$AWS_ACCOUNT_ID" ]]; then
+    topic_arn=$(build_arn sns "$AWS_REGION" "$AWS_ACCOUNT_ID" "$TOPIC_NAME")
+  else
+    topic_arn=$(aws sns list-topics \
+      --region "$AWS_REGION" \
+      --query "Topics[?contains(TopicArn, ':${TOPIC_NAME}')].TopicArn" \
+      --output text 2>/dev/null | head -n1 || echo "")
+  fi
+
+  if [[ -z "$topic_arn" ]]; then
+    msg WARNING "SNS topic '$TOPIC_NAME' does not exist"
+    return 0
+  fi
+
+  if ! aws sns get-topic-attributes --topic-arn "$topic_arn" --region "$AWS_REGION" &>/dev/null; then
+    msg WARNING "SNS topic '$TOPIC_NAME' does not exist"
+    return 0
+  fi
+
+  msg SUCCESS "SNS topic exists: $topic_arn"
+
+  msg INFO "Topic Subscriptions:"
+  aws sns list-subscriptions-by-topic \
+    --topic-arn "$topic_arn" \
+    --region "$AWS_REGION" \
+    --output json 2>/dev/null || msg INFO "No active subscriptions"
+}
+
+# ---------------------------------------------------------------------------
+# test_sns
+# ---------------------------------------------------------------------------
+test_sns() {
+  msg INFO "Running SNS test suite..."
+
+  if [[ ! -d "$SNS_TEST_DIR" ]]; then
+    msg ERROR "Test directory not found: $SNS_TEST_DIR"
+    return 1
+  fi
+
+  local test_files
+  test_files=$(find "$SNS_TEST_DIR" -maxdepth 1 -type f | sort)
+
+  if [[ -z "$test_files" ]]; then
+    msg WARNING "No tests found in $SNS_TEST_DIR"
+    return 0
+  fi
+
+  local failed=0
+  local test_file
+
+  while IFS= read -r test_file; do
+    [[ -z "$test_file" ]] && continue
+
+    if [[ ! -x "$test_file" ]]; then
+      msg WARNING "Skipping non-executable test: $test_file"
+      continue
+    fi
+
+    msg INFO "Running test: $(basename "$test_file")"
+
+    if "$test_file"; then
+      msg SUCCESS "Passed: $(basename "$test_file")"
+    else
+      msg ERROR "Failed: $(basename "$test_file")"
+      failed=$((failed + 1))
+    fi
+
+  done <<<"$test_files"
+
+  if [[ "$failed" -gt 0 ]]; then
+    msg ERROR "$failed SNS test(s) failed"
+    return 1
+  fi
+
+  msg SUCCESS "All SNS tests passed"
+}
+
+# ---------------------------------------------------------------------------
+# main
+# ---------------------------------------------------------------------------
+main() {
+  while [[ $# -gt 0 ]]; do
+    case "$1" in
+    --up | --down | --status | --test)
+      ACTION="$1"
+      shift
+      ;;
+    --aws-account-id)
+      AWS_ACCOUNT_ID="$2"
+      shift 2
+      ;;
+    --aws-region)
+      AWS_REGION="$2"
+      shift 2
+      ;;
+    --topic-name)
+      TOPIC_NAME="$2"
+      shift 2
+      ;;
+    --email)
+      ALERT_EMAIL="$2"
+      shift 2
+      ;;
+    -v | --verbose)
+      VERBOSE=true
+      shift
+      ;;
+    -h | --help)
+      usage
+      ;;
+    *)
+      msg ERROR "Unknown option: $1"
+      usage
+      ;;
+    esac
+  done
+
+  require_variable AWS_REGION
+
+  case "${ACTION:-}" in
+  --up) create_sns_topic ;;
+  --down) delete_sns_topic ;;
+  --status) sns_status ;;
+  --test) test_sns ;;
+  *)
+    msg ERROR "Action required: --up, --down, --status, or --test"
+    usage
+    ;;
+  esac
+
+  local topic_arn
+  topic_arn=$(build_arn sns "$AWS_REGION" "${AWS_ACCOUNT_ID:-<account>}" "$TOPIC_NAME")
+
+  msg "========================================================================================================="
+  msg INFO "SNS Console..........https://${AWS_REGION}.console.aws.amazon.com/sns/v3/home?region=${AWS_REGION}#/topics"
+  msg INFO "Topic Name...........${TOPIC_NAME}"
+  msg INFO "Topic ARN............${topic_arn}"
+  msg INFO "Subscription Email...${ALERT_EMAIL:-<none>}"
+  msg INFO "Region...............${AWS_REGION}"
+  msg "========================================================================================================="
+}
+
+# ---------------------------------------------------------------------------
+# Bootstrap
+# ---------------------------------------------------------------------------
+if [[ -s "${LIB_DIR}/common" ]]; then
+  # shellcheck disable=SC1091
+  . "${LIB_DIR}/common"
+else
+  echo "[ERROR] Missing: ${LIB_DIR}/common" >&2
+  exit 1
+fi
+load_script "${LIB_DIR}/logger"
+
+# Load optional .env configuration
+load_env_if_exists "${SCRIPT_DIR}/../../.env"
+
+trap 'msg ERROR "Unexpected error at line $LINENO: $BASH_COMMAND"' ERR
+
+cat <<'BANNER'
+███████╗███╗   ██╗███████╗     ██████╗████████╗██╗
+██╔════╝████╗  ██║██╔════╝    ██╔════╝╚══██╔══╝██║
+███████╗██╔██╗ ██║███████╗    ██║        ██║   ██║
+╚════██║██║╚██╗██║╚════██║    ██║        ██║   ██║
+███████║██║ ╚████║███████║    ╚██████╗   ██║   ███████╗
+╚══════╝╚═╝  ╚═══╝╚══════╝     ╚═════╝   ╚═╝   ╚══════╝
+BANNER
+
+main "$@"

@@ -1,0 +1,32 @@
+#!/usr/bin/env bash
+# =========================================
+# FILE
+#   event-bridge/test/rule_exists
+#
+# SYNOPSIS
+#   Test script to verify EventBridge rule existence.
+# =========================================
+set -Eeuo pipefail
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+LIB_DIR="${LIB_DIR:-${SCRIPT_DIR}/../../lib}"
+
+RULE_NAME="${RULE_NAME:-aws-iam-monitor-rule}"
+AWS_REGION="${AWS_REGION:-$(aws configure get region 2>/dev/null || echo 'us-east-1')}"
+
+if [[ -s "${LIB_DIR}/common" ]]; then
+  # shellcheck disable=SC1091
+  . "${LIB_DIR}/common"
+else
+  echo "[ERROR] Missing: ${LIB_DIR}/common" >&2
+  exit 1
+fi
+load_script "${LIB_DIR}/logger"
+
+if aws events describe-rule --name "$RULE_NAME" --region "$AWS_REGION" &>/dev/null; then
+  msg SUCCESS "EventBridge rule exists: ${RULE_NAME}"
+  exit 0
+fi
+
+msg ERROR "EventBridge rule does not exist: ${RULE_NAME}"
+exit 1
