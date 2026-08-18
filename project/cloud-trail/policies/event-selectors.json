@@ -1,6 +1,0 @@
-[
-  {
-    "ReadWriteType": "{{TRAIL_EVENT_SELECTOR_READ_WRITE_TYPE}}",
-    "IncludeManagementEvents": true
-  }
-]

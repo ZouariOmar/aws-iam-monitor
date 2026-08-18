@@ -1,0 +1,56 @@
+# ==============================================================================
+# aws-iam-monitor Terraform Variables Example
+# Copy this file to terraform.tfvars and set your configuration.
+#
+#   cp terraform.tfvars.example terraform.tfvars
+#
+# terraform.tfvars is gitignored — never commit real values here if they
+# differ from these safe defaults. No credentials belong in this file;
+# AWS authentication is handled entirely by the provider's standard
+# credential chain (see README.md).
+# ==============================================================================
+
+aws_region   = "us-east-1"
+project_name = "aws-iam-monitor"
+environment  = "production"
+
+# ----- IAM sandbox -----
+# Matches `./awsctl --up all` behavior: on by default. Set to false to
+# scope Terraform down to just the monitoring pipeline (CloudTrail, SNS,
+# Lambda, EventBridge, S3) without the demo Dev/Prod/Test groups & users.
+enable_iam_sandbox = true
+
+# Optional IAM roles (Dev/Prod/TestRole). Matches Bash's `-r/--role` flag —
+# opt-in, off by default.
+enable_iam_roles = false
+
+# ----- IP whitelist -----
+# Comma-in-list-form equivalent of Bash's ALLOWED_IPS="203.0.113.10/32,197.238.33.0/24"
+allowed_ips = []
+# allowed_ips = ["203.0.113.10/32", "197.238.33.0/24"]
+
+# ----- SNS -----
+sns_topic_name  = "iam-alerts"
+sns_alert_email = ""
+# sns_alert_email = "security-team@example.com"
+
+# ----- CloudTrail -----
+trail_name                      = "aws-iam-monitor-management-events"
+trail_read_write_type           = "All"
+bucket_encryption_sse_algorithm = "AES256"
+
+# ----- Lambda -----
+lambda_function_name = "aws-iam-monitor-lambda"
+lambda_role_name     = "aws-iam-monitor-lambda-role"
+lambda_policy_name   = "LambdaExecutionPolicy"
+lambda_runtime       = "python3.11"
+lambda_timeout       = 15
+lambda_memory_size   = 128
+log_retention_days   = 30
+
+# ----- EventBridge -----
+eventbridge_rule_name = "aws-iam-monitor-rule"
+
+# ----- CloudWatch -----
+# Terraform-only enhancement beyond the Bash implementation.
+enable_cloudwatch_alarms = true

@@ -1,9 +1,0 @@
-{
-  "Rules": [
-    {
-      "ApplyServerSideEncryptionByDefault": {
-        "SSEAlgorithm": "{{BUCKET_ENCRYPTION_SSE_ALGORITHM}}"
-      }
-    }
-  ]
-}
