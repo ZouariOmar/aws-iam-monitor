@@ -9,7 +9,7 @@ aws-iam-monitor Documentation
 Monitor, Audit, Protect
 -----------------------
 
-Welcome to the official documentation hub for **aws-iam-monitor** (v1.0.0).
+Welcome to the official documentation hub for **aws-iam-monitor** (v1.2.0).
 
 **aws-iam-monitor** is a production-grade, serverless AWS security solution designed to provide continuous, real-time visibility into Identity and Access Management (IAM) changes across AWS accounts and AWS Organizations.
 

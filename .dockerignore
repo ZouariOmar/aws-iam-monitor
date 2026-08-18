@@ -1,17 +1,8 @@
 # ==============================================================================
-# Created by https://dockerignore.com/
-# aws-ima-monitor dockerignore
+# aws-iam-monitor dockerignore
+#
+# The Docker image contains the Bash implementation only (project/bash/) —
+# see Dockerfile. Everything else is excluded from the build context.
 # ==============================================================================
 
-.git
-.gitignore
-.gitattributes
-project/.env
-*.log
-res/
-docapi/
-__pycache__
-aws_iam_monitor.egg-info
-*.md
-*.lock
-CODEOWNERS
+project/bash/.env

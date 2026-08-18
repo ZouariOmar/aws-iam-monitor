@@ -1,10 +1,15 @@
 Installation & Configuration
 ============================
 
-Prerequisites
--------------
+**aws-iam-monitor** ships two independent, equivalent infrastructure
+implementations: a Bash/AWS-CLI implementation (documented below) and a
+Terraform implementation (see :doc:`terraform`). Do not run both against the
+same AWS account simultaneously — they use the same default resource names.
 
-Before deploying **aws-iam-monitor**, ensure your environment meets the following requirements:
+Bash Prerequisites
+-------------------
+
+Before deploying the Bash implementation, ensure your environment meets the following requirements:
 
 * **Operating System**: Linux / macOS
 * **Shell**: Bash v5.0+
@@ -26,7 +31,7 @@ Clone the repository and set executable permissions on CLI scripts:
 .. code-block:: bash
 
   git clone https://github.com/ZouariOmar/aws-iam-monitor.git
-  cd aws-iam-monitor/project
+  cd aws-iam-monitor/project/bash
 
   chmod +x awsctl \
     lib/* \
@@ -80,3 +85,16 @@ Verify that your local environment is authenticated with AWS:
 .. code-block:: bash
 
   aws sts get-caller-identity
+
+Terraform Prerequisites
+------------------------
+
+For the Terraform implementation instead, you need:
+
+* **Terraform**: v1.5.0+
+* **AWS Account Access**: the same permissions as above
+* Network access to the Terraform Registry (``terraform init`` downloads the
+  ``hashicorp/aws``, ``hashicorp/archive``, and ``hashicorp/time`` providers
+  automatically)
+
+No other local tooling is required — see :doc:`terraform` for the full setup.

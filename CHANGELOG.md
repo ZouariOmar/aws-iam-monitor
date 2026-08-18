@@ -1,29 +1,32 @@
 # Changelog
 
-<!--toc:start-->
+## [1.2.0] - 2026-08-18
 
-- [Changelog](#changelog)
-  - [1.1.0 - 2026-08-15](#1.1.0--2026-08-15)
-    - [Features](#features)
-    - [Bug Fixes](#bug-fixes)
-    - [Refactor](#refactor)
-    - [Documentation](#documentation)
-    - [Miscellaneous Tasks](#miscellaneous-tasks)
-  - [1.0.0 - 2026-08-03](#1.0.0---2026-08-03)
-    - [Features](#features-1)
-    - [Refactor](#refactor-1)
-    - [Documentation](#documentation-1)
-    - [Miscellaneous Tasks](#miscellaneous-tasks-1)
-  - [0.1.0 - 2026-07-25](#0.1.0---2026-07-25)
-    - [Features](#features-2)
-    - [Other](#other)
-    - [Refactor](#refactor-2)
-    - [Documentation](#documentation-2)
-    - [Miscellaneous Tasks](#miscellaneous-tasks-2)
+### Features
 
-<!--toc:end-->
+- _(Makefile)_ Add issue #13 & GitHub issue Make target
+- _(terraform)_ Implement AWS infrastructure with Terraform
 
-## 1.1.0 - 2026-08-15
+### Other
+
+- Support Bash submodule in root build
+
+### Refactor
+
+- _(bash)_ Move Bash tooling into subdirectory
+
+### Documentation
+
+- _(changelog)_ Add `v1.1.0` changelog
+- _(diagram)_ Update AWS IAM monitor architecture
+- _(docapi)_ Add Terraform documentation
+- _(aws-iam-monitor)_ Update project documentation
+
+### Miscellaneous Tasks
+
+- _(release)_ V1.2.0
+
+## [1.1.0] - 2026-08-15
 
 ### Features
 
@@ -49,7 +52,7 @@
 
 - _(release)_ V1.1.0
 
-## 1.0.0 - 2026-08-03
+## [1.0.0] - 2026-08-03
 
 ### Features
 
@@ -87,7 +90,7 @@
 - _(boto3)_ Add boto3 dependency
 - _(release)_ V1.0.0
 
-## 0.1.0 - 2026-07-25
+## [0.1.0] - 2026-07-25
 
 ### Features
 

@@ -66,3 +66,15 @@ Deployment Ordering
 3. **Stage 3 (SNS)**: Create alert topic (`iam-alerts`), policy, and email subscriptions.
 4. **Stage 4 (Lambda)**: Provision history S3 bucket, package `lambda_function.py`, and deploy function.
 5. **Stage 5 (EventBridge)**: Register rule pattern, attach Lambda target, and grant invocation permissions.
+
+Terraform vs. Bash
+-------------------
+
+This same architecture and diagram apply equally to the Terraform
+implementation (``project/terraform/``) — the two are independent, equivalent
+implementations rather than a sequential pipeline vs. a declarative one being
+functionally different. Terraform additionally provisions optional CloudWatch
+alarms on the metrics AWS Lambda already emits (``UnauthorizedIPAccess`` and
+function ``Errors``), which is a Terraform-only enhancement, not a divergence
+in required behavior — see :doc:`../getting_started/terraform` and
+``project/terraform/README.md`` for the complete comparison.
