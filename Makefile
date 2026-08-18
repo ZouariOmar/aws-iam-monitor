@@ -3,32 +3,37 @@
 # =========================================================
 
 # ----- Project configuration -----
-PROJECT_NAME    ?= aws-iam-monitor## Project name
-SRC_DIR         ?= project## Source code directory
-VERSION_FILE    ?= VERSION## File storing current version
-PROJECT_VERSION ?= $(shell cat $(VERSION_FILE)) ## Current project version (read from VERSION file)
-DOCAPI_DIR      ?= docapi## Project api Documentention
-IMAGE_NAME      ?= aws-iam-monitor## Docker image name
-CONTAINER_NAME  ?= aws-iam-monitor## Docker container name
-DOCKERFILE      ?= Dockerfile## Docker file
-ENV_FILE        ?= $(SRC_DIR)/.env## Environment file
+PROJECT_NAME      ?= aws-iam-monitor## Project name
+SRC_DIR           ?= project## Source code directory
+VERSION_FILE      ?= VERSION## File storing current version
+PROJECT_VERSION   ?= $(shell cat $(VERSION_FILE)) ## Current project version (read from VERSION file)
+DOCAPI_DIR        ?= docapi## Project api Documentention
+IMAGE_NAME        ?= aws-iam-monitor## Docker image name
+CONTAINER_NAME    ?= aws-iam-monitor## Docker container name
+DOCKERFILE        ?= Dockerfile## Docker file
+ENV_FILE          ?= $(SRC_DIR)/.env## Environment file
+GITHUB_ISSUES_DIR ?= .github/issues## Github issues directory
 
 # Commands
-RUN_CMD          ?= cd $(SRC_DIR) && ./awsctl                                     ## Run command
-TEST_CMD         ?= cd $(SRC_DIR) && ./awsctl --test                              ## Test command
-DOCS_CMD         ?= make -C $(DOCAPI_DIR)                                         ## Docs generation command
-DOCS_SERVE_CMD   ?= cd "$(DOCAPI_DIR)/build/html" && python -m http.server 8000   ## Serve docs commmand
-DOCS_DEPLOY_CMD  ?= vercel --prod $(DOCAPI_DIR)/build/html                        ## Deploy docs command
-DOCS_PREVIEW_CMD ?= vercel $(DOCAPI_DIR)/build/html                               ## Preview docs command
-CHANGELOG_CMD    ?= git cliff -o CHANGELOG.md                                     ## Changelog command
-INIT_CMD         ?= uv venv .venv                                                 ## Init command
-SYNC_CMD         ?= uv sync                                                       ## Sync command
-CLEAN_CMD        ?= rm -rf .venv $(DOCAPI_DIR)/build uv.lock *.egg-info                                     ## Clean commmand
-DOCKER_BUILD_CMD ?= docker build -f $(DOCKERFILE) -t $(IMAGE_NAME) .                                        ## Doocker build command
-DOCKER_BASH_CMD  ?= docker run --rm -it --name $(CONTAINER_NAME) --env-file $(ENV_FILE) $(IMAGE_NAME) bash  ## Docker bash commmand
-DOCKER_RUN_CMD   ?= docker run --rm --name $(CONTAINER_NAME) --env-file $(ENV_FILE) $(IMAGE_NAME)           ## Docker run commmand
-DOCKER_STOP_CMD  ?= docker stop $(CONTAINER_NAME)                                                           ## Docker stop commmand
-DOCKER_CLEAN_CMD ?= docker rmi $(IMAGE_NAME)                                                                ## Docker clean commmand
+RUN_CMD           ?= cd $(SRC_DIR) && ./awsctl                                     ## Run command
+TEST_CMD          ?= cd $(SRC_DIR) && ./awsctl --test                              ## Test command
+DOCS_CMD          ?= make -C $(DOCAPI_DIR)                                         ## Docs generation command
+DOCS_SERVE_CMD    ?= cd "$(DOCAPI_DIR)/build/html" && python -m http.server 8000   ## Serve docs commmand
+DOCS_DEPLOY_CMD   ?= vercel --prod $(DOCAPI_DIR)/build/html                        ## Deploy docs command
+DOCS_PREVIEW_CMD  ?= vercel $(DOCAPI_DIR)/build/html                               ## Preview docs command
+CHANGELOG_CMD     ?= git cliff -o CHANGELOG.md                                     ## Changelog command
+INIT_CMD          ?= uv venv .venv                                                 ## Init command
+SYNC_CMD          ?= uv sync                                                       ## Sync command
+CLEAN_CMD         ?= rm -rf .venv $(DOCAPI_DIR)/build uv.lock *.egg-info                                     ## Clean commmand
+DOCKER_BUILD_CMD  ?= docker build -f $(DOCKERFILE) -t $(IMAGE_NAME) .                                        ## Doocker build command
+DOCKER_BASH_CMD   ?= docker run --rm -it --name $(CONTAINER_NAME) --env-file $(ENV_FILE) $(IMAGE_NAME) bash  ## Docker bash commmand
+DOCKER_RUN_CMD    ?= docker run --rm --name $(CONTAINER_NAME) --env-file $(ENV_FILE) $(IMAGE_NAME)           ## Docker run commmand
+DOCKER_STOP_CMD   ?= docker stop $(CONTAINER_NAME)                                                           ## Docker stop commmand
+DOCKER_CLEAN_CMD  ?= docker rmi $(IMAGE_NAME)                                                                ## Docker clean commmand
+GITHUB_ISSUES_CMD ?= gh issue create \
+	                  --title "$(TITLE)" \
+	                  --body-file "$(GITHUB_ISSUES_DIR)/$(FILE)" \
+                    --assignee "@me"                                                                         ## Github issue commmand
 
 # Shell settings
 SHELL         := /bin/bash
@@ -87,7 +92,19 @@ sync: ## Sync the project
 .PHONY: run
 run: ## Run the project
 	$(call print_title,Running $(PROJECT_NAME))
-	@$(RUN_CMD)
+	@$(RUN_CMD) $(ARGS)
+
+.PHONY: gh-issue
+gh-issue: ## Create a GitHub issue using a Markdown file (TITLE=... FILE=... [LABELS=...] [TYPE=...])
+	$(call print_title,Create new GitHub issue...)
+	$(call print_title,Create new github issue...)
+	@test -n "$(TITLE)" || (echo "Error: TITLE is required"; exit 1)
+	@test -n "$(FILE)" || (echo "Error: FILE is required"; exit 1)
+	@test -f "$(GITHUB_ISSUES_DIR)/$(FILE)" || (echo "Error: FILE '$(GITHUB_ISSUES_DIR)/$(FILE)' not found"; exit 1)
+	@$(GITHUB_ISSUES_CMD) \
+		$(if $(LABELS),--label "$(LABELS)") \
+		$(if $(TYPE),--type "$(TYPE)")
+
 
 .PHONY: test
 test: ## Run project tests
