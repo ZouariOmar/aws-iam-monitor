@@ -96,12 +96,13 @@ reference.
 
 ### Docker
 
-Builds and runs the **Bash implementation only** (`project/bash/`),
-the Terraform implementation has no Docker image and must be run
-directly on the host.
+Each implementation has its own Dockerfile (`project/bash/Dockerfile`,
+`project/terraform/Dockerfile`) and its own set of Makefile targets, prefixed
+`bash-docker-*` and `tr-docker-*` respectively:
 
 ```bash
-make docker
+make bash-docker  # build + run + open a shell (Bash implementation)
+make tr-docker    # build + run + open a shell (Terraform implementation)
 ```
 
 Once installed, see [USAGE.md](USAGE.md) for how to run either

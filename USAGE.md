@@ -80,13 +80,24 @@ which remain independently usable via `make -C project/bash <target>` /
 
 ### Docker
 
-| Target              | Description                       |
-| :------------------ | :-------------------------------- |
-| `make docker-build` | Build the Docker image            |
-| `make docker-bash`  | Open a shell inside the container |
-| `make docker-run`   | Run `awsctl` inside Docker        |
-| `make docker-stop`  | Stop the running container        |
-| `make docker-clean` | Remove the Docker image           |
+Each implementation builds and runs from its own Dockerfile
+(`project/bash/Dockerfile`, `project/terraform/Dockerfile`), via its own
+prefixed set of targets:
+
+| Target                    | Description                                     |
+| :------------------------ | :----------------------------------------------- |
+| `make bash-docker`        | Build + run + open a shell (Bash)               |
+| `make bash-docker-build`  | Build the Bash Docker image                     |
+| `make bash-docker-bash`   | Open a shell inside the Bash container          |
+| `make bash-docker-run`    | Run `awsctl` inside the Bash container          |
+| `make bash-docker-stop`   | Stop the running Bash container                 |
+| `make bash-docker-clean`  | Remove the Bash Docker image                    |
+| `make tr-docker`          | Build + run + open a shell (Terraform)          |
+| `make tr-docker-build`    | Build the Terraform Docker image                |
+| `make tr-docker-bash`     | Open a shell inside the Terraform container     |
+| `make tr-docker-run`      | Run `terraform` inside the Terraform container  |
+| `make tr-docker-stop`     | Stop the running Terraform container            |
+| `make tr-docker-clean`    | Remove the Terraform Docker image               |
 
 ## Bash - `awsctl`
 

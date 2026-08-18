@@ -1,0 +1,14 @@
+# ================================================
+# aws-iam-monitor - Terraform Docker build context
+# ================================================
+
+.terraform/
+*.tfstate
+*.tfstate.*
+crash*.log
+override.tf*
+*_override.tf*
+*.tfvars
+*.tfvars.json
+!terraform.tfvars.example
+*.tfplan

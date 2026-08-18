@@ -3,19 +3,22 @@
 # =========================================================
 
 # ----- Project configuration -----
-PROJECT_NAME      ?= aws-iam-monitor## Project name
-BASH_DIR           ?= project/bash## Bash implementation source directory
-TERRAFORM_DIR     ?= project/terraform## Terraform implementation source directory
-VERSION_FILE      ?= VERSION## File storing current version
-PROJECT_VERSION   ?= $(shell cat $(VERSION_FILE)) ## Current project version (read from VERSION file)
-DOCAPI_DIR        ?= docapi## Project api Documentention
-IMAGE_NAME        ?= aws-iam-monitor## Docker image name
-CONTAINER_NAME    ?= aws-iam-monitor## Docker container name
-DOCKERFILE        ?= Dockerfile## Docker file
-ENV_FILE          ?= $(BASH_DIR)/.env## Environment file
-GITHUB_ISSUES_DIR ?= .github/issues## Github issues directory
-TARGET            ?= all## awsctl target, passed through to the Bash sub-Makefile (iam, cloud-trail, sns, lambda, event-bridge, all)
-ARGS              ?=## Extra flags, passed through to the Bash/Terraform sub-Makefiles (e.g. ARGS=--verbose or ARGS="-var-file=other.tfvars")
+PROJECT_NAME        ?= aws-iam-monitor## Project name
+BASH_DIR            ?= project/bash## Bash implementation source directory
+TERRAFORM_DIR       ?= project/terraform## Terraform implementation source directory
+VERSION_FILE        ?= VERSION## File storing current version
+PROJECT_VERSION     ?= $(shell cat $(VERSION_FILE)) ## Current project version (read from VERSION file)
+DOCAPI_DIR          ?= docapi## Project api Documentention
+BASH_IMAGE_NAME     ?= aws-iam-monitor-bash## Bash Docker image name
+BASH_CONTAINER_NAME ?= aws-iam-monitor-bash## Bash Docker container name
+BASH_DOCKERFILE     ?= $(BASH_DIR)/Dockerfile## Bash Dockerfile
+ENV_FILE            ?= $(BASH_DIR)/.env## Environment file (Bash Docker container)
+TF_IMAGE_NAME       ?= aws-iam-monitor-terraform## Terraform Docker image name
+TF_CONTAINER_NAME   ?= aws-iam-monitor-terraform## Terraform Docker container name
+TF_DOCKERFILE       ?= $(TERRAFORM_DIR)/Dockerfile## Terraform Dockerfile
+GITHUB_ISSUES_DIR   ?= .github/issues## Github issues directory
+TARGET              ?= all## awsctl target, passed through to the Bash sub-Makefile (iam, cloud-trail, sns, lambda, event-bridge, all)
+ARGS                ?=## Extra flags, passed through to the Bash/Terraform sub-Makefiles (e.g. ARGS=--verbose or ARGS="-var-file=other.tfvars")
 
 # Commands
 RUN_CMD           ?= cd $(BASH_DIR) && ./awsctl                                    ## Run command
@@ -29,16 +32,21 @@ DOCS_PREVIEW_CMD  ?= vercel $(DOCAPI_DIR)/build/html                            
 CHANGELOG_CMD     ?= git cliff -o CHANGELOG.md                                     ## Changelog command
 INIT_CMD          ?= uv venv .venv                                                 ## Init command
 SYNC_CMD          ?= uv sync                                                       ## Sync command
-CLEAN_CMD         ?= rm -rf .venv $(DOCAPI_DIR)/build uv.lock *.egg-info                                     ## Clean commmand
-DOCKER_BUILD_CMD  ?= docker build -f $(DOCKERFILE) -t $(IMAGE_NAME) .                                        ## Doocker build command
-DOCKER_BASH_CMD   ?= docker run --rm -it --name $(CONTAINER_NAME) --env-file $(ENV_FILE) $(IMAGE_NAME) bash  ## Docker bash commmand
-DOCKER_RUN_CMD    ?= docker run --rm --name $(CONTAINER_NAME) --env-file $(ENV_FILE) $(IMAGE_NAME)           ## Docker run commmand
-DOCKER_STOP_CMD   ?= docker stop $(CONTAINER_NAME)                                                           ## Docker stop commmand
-DOCKER_CLEAN_CMD  ?= docker rmi $(IMAGE_NAME)                                                                ## Docker clean commmand
+CLEAN_CMD         ?= rm -rf .venv $(DOCAPI_DIR)/build uv.lock *.egg-info                                               ## Clean commmand
+BASH_DOCKER_BUILD_CMD ?= docker build -f $(BASH_DOCKERFILE) -t $(BASH_IMAGE_NAME) $(BASH_DIR)                          ## Bash docker build command
+BASH_DOCKER_BASH_CMD  ?= docker run --rm -it --name $(BASH_CONTAINER_NAME) --env-file $(ENV_FILE) $(BASH_IMAGE_NAME) bash ## Bash docker bash commmand
+BASH_DOCKER_RUN_CMD   ?= docker run --rm --name $(BASH_CONTAINER_NAME) --env-file $(ENV_FILE) $(BASH_IMAGE_NAME)       ## Bash docker run commmand
+BASH_DOCKER_STOP_CMD  ?= docker stop $(BASH_CONTAINER_NAME)                                                            ## Bash docker stop commmand
+BASH_DOCKER_CLEAN_CMD ?= docker rmi $(BASH_IMAGE_NAME)                                                                 ## Bash docker clean commmand
+TF_DOCKER_BUILD_CMD   ?= docker build -f $(TF_DOCKERFILE) -t $(TF_IMAGE_NAME) $(TERRAFORM_DIR)                         ## Terraform docker build command
+TF_DOCKER_BASH_CMD    ?= docker run --rm -it --name $(TF_CONTAINER_NAME) $(TF_IMAGE_NAME) bash                         ## Terraform docker bash commmand
+TF_DOCKER_RUN_CMD     ?= docker run --rm --name $(TF_CONTAINER_NAME) $(TF_IMAGE_NAME)                                  ## Terraform docker run commmand
+TF_DOCKER_STOP_CMD    ?= docker stop $(TF_CONTAINER_NAME)                                                              ## Terraform docker stop commmand
+TF_DOCKER_CLEAN_CMD   ?= docker rmi $(TF_IMAGE_NAME)                                                                   ## Terraform docker clean commmand
 GITHUB_ISSUES_CMD ?= gh issue create \
 	                  --title "$(TITLE)" \
 	                  --body-file "$(GITHUB_ISSUES_DIR)/$(FILE)" \
-                    --assignee "@me"                                                                         ## Github issue commmand
+                    --assignee "@me"                                                                                   ## Github issue commmand
 
 # Shell settings
 SHELL         := /bin/bash
@@ -167,9 +175,37 @@ bash-test: ## Run the Bash implementation's test suite [TARGET=... ARGS=]
 	$(call print_title,Bash: test $(TARGET))
 	@$(BASH_MAKE_CMD) test TARGET=$(TARGET) ARGS=$(ARGS)
 
-# =========================================================
+.PHONY: bash-docker
+bash-docker: bash-docker-build bash-docker-run bash-docker-bash
+
+.PHONY: bash-docker-build
+bash-docker-build: ## Build the Bash Docker image
+	@$(call print_title,Build Bash docker image...)
+	@$(BASH_DOCKER_BUILD_CMD)
+
+.PHONY: bash-docker-bash
+bash-docker-bash: ## Open a bash shell inside the Bash Docker container
+	@$(call print_title,Open Bash docker container bash...)
+	@$(BASH_DOCKER_BASH_CMD)
+
+.PHONY: bash-docker-run
+bash-docker-run: ## Run awsctl inside the Bash Docker container
+	@$(call print_title,Run Bash docker container...)
+	@$(BASH_DOCKER_RUN_CMD)
+
+.PHONY: bash-docker-stop
+bash-docker-stop: ## Stop the running Bash Docker container
+	@$(call print_title,Stop Bash docker container...)
+	@$(BASH_DOCKER_STOP_CMD) || true
+
+.PHONY: bash-docker-clean
+bash-docker-clean: ## Remove the Bash Docker image
+	@$(call print_title,Remove Bash docker image...)
+	@$(BASH_DOCKER_CLEAN_CMD) || true
+
+# ==================================================================
 # Terraform implementation (delegates to project/terraform/Makefile)
-# =========================================================
+# ==================================================================
 
 .PHONY: tf-init
 tf-init: ## Initialize the Terraform implementation [ARGS=]
@@ -206,6 +242,34 @@ tf-output: ## Show Terraform implementation outputs [ARGS="-json"]
 	$(call print_title,Terraform: output)
 	@$(TF_MAKE_CMD) output ARGS=$(ARGS)
 
+.PHONY: tr-docker
+tr-docker: tr-docker-build tr-docker-run tr-docker-bash
+
+.PHONY: tr-docker-build
+tr-docker-build: ## Build the Terraform Docker image
+	@$(call print_title,Build Terraform docker image...)
+	@$(TF_DOCKER_BUILD_CMD)
+
+.PHONY: tr-docker-bash
+tr-docker-bash: ## Open a bash shell inside the Terraform Docker container
+	@$(call print_title,Open Terraform docker container bash...)
+	@$(TF_DOCKER_BASH_CMD)
+
+.PHONY: tr-docker-run
+tr-docker-run: ## Run terraform inside the Terraform Docker container
+	@$(call print_title,Run Terraform docker container...)
+	@$(TF_DOCKER_RUN_CMD)
+
+.PHONY: tr-docker-stop
+tr-docker-stop: ## Stop the running Terraform Docker container
+	@$(call print_title,Stop Terraform docker container...)
+	@$(TF_DOCKER_STOP_CMD) || true
+
+.PHONY: tr-docker-clean
+tr-docker-clean: ## Remove the Terraform Docker image
+	@$(call print_title,Remove Terraform docker image...)
+	@$(TF_DOCKER_CLEAN_CMD) || true
+
 # =========================================================
 # Documentation
 # =========================================================
@@ -231,38 +295,6 @@ docs-serve: ## Serve the documentation
 docs-%: ## Document the project
 	@$(call print_title,$* $(PROJECT_NAME) docsapi...)
 	@$(DOCS_CMD) $*
-
-# =========================================================
-# Docker
-# =========================================================
-
-.PHONY: docker
-docker: docker-build docker-run docker-bash
-
-.PHONY: docker-build
-docker-build: ## Build the Docker image
-	@$(call print_title,Build docker image...)
-	@$(DOCKER_BUILD_CMD)
-
-.PHONY: docker-bash
-docker-bash: ## Open a bash shell inside the Docker container
-	@$(call print_title,Open docker container bash...)
-	@$(DOCKER_BASH_CMD)
-
-.PHONY: docker-run
-docker-run: ## Run awsctl inside Docker
-	@$(call print_title,Run docker container...)
-	@$(DOCKER_RUN_CMD)
-
-.PHONY: docker-stop
-docker-stop: ## Stop the Docker container
-	@$(call print_title,Stop docker container...)
-	@$(DOCKER_STOP_CMD) || true
-
-.PHONY: docker-clean
-docker-clean: ## Remove the Docker image
-	@$(call print_title,Remove docker image...)
-	@$(DOCKER_CLEAN_CMD) || true
 
 # =========================================================
 # Environment
