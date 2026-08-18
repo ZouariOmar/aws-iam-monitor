@@ -1,5 +1,23 @@
 # Security Policy
 
+- [Security Policy](#security-policy)
+  - [Supported Versions](#supported-versions)
+  - [Reporting a Vulnerability](#reporting-a-vulnerability)
+    - [How to Report](#how-to-report)
+    - [Response Process](#response-process)
+  - [Security Practices](#security-practices)
+    - [Least Privilege](#least-privilege)
+    - [IP Whitelisting](#ip-whitelisting)
+    - [Idempotent, Safe Operations](#idempotent-safe-operations)
+    - [Secure AWS Integrations](#secure-aws-integrations)
+    - [Data Protection](#data-protection)
+    - [Secrets Management](#secrets-management)
+    - [Logging](#logging)
+    - [Dependency Management](#dependency-management)
+  - [Security Contributions](#security-contributions)
+  - [AWS Security Recommendations](#aws-security-recommendations)
+  - [Resources](#resources)
+
 ## Supported Versions
 
 The following versions of **aws-iam-monitor** receive security updates.
@@ -50,6 +68,16 @@ The project follows security best practices for AWS environments.
 - The system supports automated `IPWhitelistPolicy` generation to restrict IAM actions to trusted networks.
 - Continuous monitoring validates the source IP of every IAM event against a pre-configured `ALLOWED_IPS` list.
 - Unauthorized access attempts from blocked IPs trigger high-priority alerts and custom CloudWatch metrics.
+
+### Idempotent, Safe Operations
+
+- Both implementations check resource state before creating, updating, or
+  deleting it, to avoid duplicate resources and unintended service
+  disruptions.
+- The Bash implementation's `awsctl` and its `*_ctl` sub-scripts verify
+  existence/hashes before acting; the Terraform implementation relies on
+  Terraform's own state-diffing (`terraform plan`) for the same guarantee,
+  a second `terraform plan` after `apply` should show no changes.
 
 ### Secure AWS Integrations
 

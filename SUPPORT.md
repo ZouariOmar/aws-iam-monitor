@@ -1,5 +1,11 @@
 # Support
 
+- [Support](#support)
+  - [Getting Help](#getting-help)
+  - [Reporting Bugs](#reporting-bugs)
+  - [Feature Requests](#feature-requests)
+  - [Security Issues](#security-issues)
+
 ## Getting Help
 
 If you encounter issues or have questions:
