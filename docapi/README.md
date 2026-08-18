@@ -1,4 +1,4 @@
-# docsapi
+# Docs API
 
 ![Docs](https://img.shields.io/badge/docs-full-blue?style=for-the-badge&logo=readthedocs&logoColor=white)
 ![Markdown](https://img.shields.io/badge/markdown-supported-black?style=for-the-badge&logo=markdown&logoColor=white)

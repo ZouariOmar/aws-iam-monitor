@@ -1,7 +1,11 @@
-CLI Usage & Command Reference
-=============================
+CLI Usage & Command Reference (Bash)
+=====================================
 
-The primary orchestration interface is ``./awsctl`` located in the ``project/`` directory.
+This page documents the Bash implementation's ``awsctl`` CLI. For the
+Terraform implementation, see :doc:`terraform`.
+
+The primary orchestration interface is ``./awsctl`` located in the
+``project/bash/`` directory.
 
 Command Syntax
 --------------

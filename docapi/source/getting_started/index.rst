@@ -6,3 +6,4 @@
 
   installation
   usage
+  terraform
