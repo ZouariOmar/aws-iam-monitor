@@ -1,0 +1,570 @@
+\documentclass[11pt,a4paper]{article}
+
+\usepackage[utf8]{inputenc}
+\usepackage[T1]{fontenc}
+\usepackage[french,provide=*]{babel}
+\usepackage[margin=2.3cm]{geometry}
+\usepackage{titlesec}
+\usepackage{enumitem}
+\usepackage{xcolor}
+\usepackage{tcolorbox}
+\tcbuselibrary{skins,breakable}
+\usepackage{fancyhdr}
+\usepackage{tabularx}
+\usepackage{longtable}
+\usepackage{booktabs}
+\usepackage{graphicx}
+\usepackage{hyperref}
+\usepackage{parskip}
+\usepackage{lastpage}
+
+\graphicspath{{../img/}}
+
+% ---------- Couleurs ----------
+\definecolor{primaryblue}{RGB}{20,50,90}
+\definecolor{accentorange}{RGB}{214,110,40}
+\definecolor{lightgray}{RGB}{242,242,242}
+\definecolor{textgray}{RGB}{80,80,80}
+
+% ---------- Hyperref ----------
+\hypersetup{
+  colorlinks=true,
+  linkcolor=primaryblue,
+  urlcolor=primaryblue,
+  citecolor=primaryblue,
+  pdftitle={Journal de stage},
+  pdfauthor={},
+  pdfsubject={Journal de stage - Supervision et audit AWS IAM},
+}
+
+% ---------- Titres ----------
+\titleformat{\section}
+  {\normalfont\Large\bfseries\color{primaryblue}}
+  {\thesection}{0.6em}{}[{\color{primaryblue}\titlerule[1pt]}]
+\titleformat{\subsection}
+  {\normalfont\large\bfseries\color{primaryblue}}
+  {\thesubsection}{0.6em}{}
+\titlespacing*{\section}{0pt}{18pt}{10pt}
+\titlespacing*{\subsection}{0pt}{14pt}{8pt}
+
+% ---------- En-tête / pied de page ----------
+\pagestyle{fancy}
+\fancyhf{}
+\renewcommand{\headrulewidth}{0.4pt}
+\renewcommand{\footrulewidth}{0.4pt}
+\fancyhead[L]{\small\color{textgray} Journal de stage}
+\fancyhead[R]{\small\color{textgray} aws-iam-monitor}
+\fancyfoot[C]{\small\color{textgray} Page \thepage\ / \pageref{LastPage}}
+
+% ---------- Commande pour une entrée de journal ----------
+\newtcolorbox{journalday}[2]{
+  enhanced,
+  breakable,
+  colback=lightgray,
+  colframe=primaryblue,
+  boxrule=0.5pt,
+  arc=2pt,
+  left=8pt, right=8pt, top=6pt, bottom=6pt,
+  before skip=10pt, after skip=4pt,
+  title={\textbf{#1} \hfill \textit{#2}},
+  coltitle=white,
+  colbacktitle=primaryblue,
+  fonttitle=\bfseries\small,
+}
+
+\newcommand{\journalfield}[2]{{\color{primaryblue}\textbf{#1 :}} #2\par\smallskip}
+\newcommand{\restday}[2]{%
+  \noindent\fcolorbox{textgray}{white}{%
+    \begin{minipage}{0.97\linewidth}
+      \small\textbf{#1} — \textit{\color{textgray}#2}
+    \end{minipage}%
+  }\par\smallskip
+}
+
+\newcommand{\phasebanner}[1]{%
+  \begin{center}
+  \colorbox{accentorange}{\parbox{0.9\linewidth}{\centering\color{white}\bfseries\large #1}}
+  \end{center}
+  \vspace{4pt}
+}
+
+\newcommand{\journalfigure}[3]{%
+  \begin{figure}[h]
+    \centering
+    \includegraphics[width=#2\linewidth]{#1}
+    \caption{\small #3}
+  \end{figure}
+}
+
+\begin{document}
+
+% ======================= PAGE DE GARDE =======================
+\begin{titlepage}
+\centering
+\vspace*{0.6cm}
+
+\includegraphics[width=0.32\linewidth]{aws-iam-monitor-logo.png}\\[0.6cm]
+
+{\large \textbf{ESPRIT}}\\[2pt]
+  {\normalsize Cloud et Sécurité}\\[1.2cm]
+
+\rule{0.85\linewidth}{0.6pt}\\[0.6cm]
+
+{\Huge \bfseries \color{primaryblue} Journal de Stage}\\[0.4cm]
+{\Large \color{textgray} Conception et développement d'une plateforme serverless de supervision, d'audit et de détection des menaces liées aux modifications AWS IAM}\\[0.6cm]
+
+\rule{0.85\linewidth}{0.6pt}\\[1cm]
+
+\begin{tabularx}{0.8\linewidth}{@{}l X@{}}
+\textbf{Étudiant(e) :} & Zouari Omar \\[6pt]
+\textbf{Organisme d'accueil :} & Vermeg \\[6pt]
+\textbf{Encadrant professionnel :} & Mr.Amine Chtioui \\[6pt]
+\textbf{Période de stage :} & 1\textsuperscript{er} juillet 2026 -- 31 août 2026 \\[6pt]
+\textbf{Année universitaire :} & 1re année cycle ingénieur \\[6pt]
+\textbf{Projet support :} & \texttt{aws-iam-monitor} \\
+\end{tabularx}
+
+\vfill
+
+{\small \color{textgray} Ce document présente le journal de stage jour par jour, reconstruit à partir de l'historique réel des travaux menés sur le projet \texttt{aws-iam-monitor} et des ressources d'apprentissage AWS associées.}
+
+\end{titlepage}
+
+\tableofcontents
+\newpage
+
+% ======================= PARTIE A : CALENDRIER =======================
+\section*{Partie A --- Calendrier du stage}
+\addcontentsline{toc}{section}{Partie A --- Calendrier du stage}
+
+Le stage couvre la période du \textbf{1\textsuperscript{er} juillet 2026} au \textbf{31 août 2026}, soit 62 jours calendaires. Le calendrier des jours effectivement travaillés a été établi selon les règles suivantes : suppression de tous les samedis et dimanches, puis suppression des jours fériés tunisiens tombant un jour ouvré sur la période.
+
+\begin{center}
+\renewcommand{\arraystretch}{1.3}
+\begin{tabularx}{0.85\linewidth}{X r}
+\toprule
+\textbf{Élément} & \textbf{Valeur} \\
+\midrule
+Période du stage & 01/07/2026 -- 31/08/2026 \\
+Nombre de jours calendaires & 62 \\
+Samedis et dimanches retirés & 18 \\
+Jours fériés tombant un jour ouvré retirés & 2 \\
+\textbf{Nombre total de jours travaillés} & \textbf{42} \\
+\bottomrule
+\end{tabularx}
+\end{center}
+
+\subsection*{Jours fériés tunisiens concernant la période}
+\begin{center}
+\renewcommand{\arraystretch}{1.3}
+\begin{tabularx}{\linewidth}{l l X}
+\toprule
+\textbf{Date} & \textbf{Jour} & \textbf{Désignation} \\
+\midrule
+25/07/2026 & Samedi & Fête de la République (tombe un week-end, sans impact sur le calendrier des jours travaillés) \\
+13/08/2026 & Jeudi & Fête de la Femme et de la Famille (jour ouvré retiré) \\
+25/08/2026 & Mardi & Al Mawlid, anniversaire du Prophète -- \textit{date fixée selon le calendrier lunaire, sous réserve de confirmation officielle} (jour ouvré retiré) \\
+\bottomrule
+\end{tabularx}
+\end{center}
+
+\subsection*{Organisation générale}
+Le stage est structuré en trois grandes phases, détaillées dans le journal ci-après :
+\begin{itemize}[leftmargin=1.4em]
+  \item \textbf{Phase 1 -- Découverte et apprentissage AWS} : 5 jours (01--07 juillet 2026) ;
+  \item \textbf{Phase 2 -- Développement du projet \texttt{aws-iam-monitor}} : 32 jours (08 juillet -- 21 août 2026) ;
+  \item \textbf{Phase 3 -- Finalisation, documentation et préparation de la soutenance} : 5 jours (24--31 août 2026).
+\end{itemize}
+
+\subsection*{Calendrier détaillé des jours travaillés}
+{\small
+\begin{longtable}{l l l}
+\toprule
+\textbf{Date} & \textbf{Jour} & \textbf{Statut} \\
+\midrule
+\endfirsthead
+\toprule
+\textbf{Date} & \textbf{Jour} & \textbf{Statut} \\
+\midrule
+\endhead
+01/07/2026 & Mercredi & Travaillé \\
+02/07/2026 & Jeudi & Travaillé \\
+03/07/2026 & Vendredi & Travaillé \\
+04/07/2026 & Samedi & Repos (week-end) \\
+05/07/2026 & Dimanche & Repos (week-end) \\
+06/07/2026 & Lundi & Travaillé \\
+07/07/2026 & Mardi & Travaillé \\
+08/07/2026 & Mercredi & Travaillé \\
+09/07/2026 & Jeudi & Travaillé \\
+10/07/2026 & Vendredi & Travaillé \\
+11/07/2026 & Samedi & Repos (week-end) \\
+12/07/2026 & Dimanche & Repos (week-end) \\
+13/07/2026 & Lundi & Travaillé \\
+14/07/2026 & Mardi & Travaillé \\
+15/07/2026 & Mercredi & Travaillé \\
+16/07/2026 & Jeudi & Travaillé \\
+17/07/2026 & Vendredi & Travaillé \\
+18/07/2026 & Samedi & Repos (week-end) \\
+19/07/2026 & Dimanche & Repos (week-end) \\
+20/07/2026 & Lundi & Travaillé \\
+21/07/2026 & Mardi & Travaillé \\
+22/07/2026 & Mercredi & Travaillé \\
+23/07/2026 & Jeudi & Travaillé \\
+24/07/2026 & Vendredi & Travaillé \\
+25/07/2026 & Samedi & Repos (week-end) / Fête de la République \\
+26/07/2026 & Dimanche & Repos (week-end) \\
+27/07/2026 & Lundi & Travaillé \\
+28/07/2026 & Mardi & Travaillé \\
+29/07/2026 & Mercredi & Travaillé \\
+30/07/2026 & Jeudi & Travaillé \\
+31/07/2026 & Vendredi & Travaillé \\
+01/08/2026 & Samedi & Repos (week-end) \\
+02/08/2026 & Dimanche & Repos (week-end) \\
+03/08/2026 & Lundi & Travaillé \\
+04/08/2026 & Mardi & Travaillé \\
+05/08/2026 & Mercredi & Travaillé \\
+06/08/2026 & Jeudi & Travaillé \\
+07/08/2026 & Vendredi & Travaillé \\
+08/08/2026 & Samedi & Repos (week-end) \\
+09/08/2026 & Dimanche & Repos (week-end) \\
+10/08/2026 & Lundi & Travaillé \\
+11/08/2026 & Mardi & Travaillé \\
+12/08/2026 & Mercredi & Travaillé \\
+13/08/2026 & Jeudi & Jour férié -- Fête de la Femme et de la Famille \\
+14/08/2026 & Vendredi & Travaillé \\
+15/08/2026 & Samedi & Repos (week-end) \\
+16/08/2026 & Dimanche & Repos (week-end) \\
+17/08/2026 & Lundi & Travaillé \\
+18/08/2026 & Mardi & Travaillé \\
+19/08/2026 & Mercredi & Travaillé \\
+20/08/2026 & Jeudi & Travaillé \\
+21/08/2026 & Vendredi & Travaillé \\
+22/08/2026 & Samedi & Repos (week-end) \\
+23/08/2026 & Dimanche & Repos (week-end) \\
+24/08/2026 & Lundi & Travaillé \\
+25/08/2026 & Mardi & Jour férié -- Al Mawlid (sous réserve) \\
+26/08/2026 & Mercredi & Travaillé \\
+27/08/2026 & Jeudi & Travaillé \\
+28/08/2026 & Vendredi & Travaillé \\
+29/08/2026 & Samedi & Repos (week-end) \\
+30/08/2026 & Dimanche & Repos (week-end) \\
+31/08/2026 & Lundi & Travaillé \\
+\bottomrule
+\end{longtable}
+}
+
+\newpage
+
+% ======================= PARTIE B : JOURNAL =======================
+\section*{Partie B --- Journal de stage jour par jour}
+\addcontentsline{toc}{section}{Partie B --- Journal de stage jour par jour}
+
+\phasebanner{Phase 1 --- Découverte et apprentissage AWS (01 -- 07 juillet 2026)}
+
+\begin{journalday}{Mercredi 01/07/2026}{Jour 1}
+\journalfield{Activités réalisées}{Prise de contact avec l'organisme d'accueil, cadrage des objectifs du stage et du projet support (\texttt{aws-iam-monitor}). Mise en place de l'environnement de travail : installation et configuration d'AWS CLI, création d'un compte de travail restreint, premiers repères dans la console AWS IAM.}
+\journalfield{Objectif}{Disposer d'un environnement fonctionnel avant d'aborder l'étude des services AWS et de sécuriser l'accès au compte de travail.}
+\journalfield{Technologies / outils}{AWS CLI, console AWS, AWS IAM.}
+\journalfield{Résultats / acquis}{Environnement de travail opérationnel ; premières notes prises dans le dépôt personnel de ressources AWS.}
+\end{journalday}
+
+\begin{journalday}{Jeudi 02/07/2026}{Jour 2}
+\journalfield{Activités réalisées}{Étude du service AWS IAM : utilisateurs, groupes, rôles, politiques (policies) managées et en ligne, mécanismes d'attachement des permissions et principe du moindre privilège.}
+\journalfield{Objectif}{Acquérir les bases nécessaires à la compréhension du modèle de permissions AWS, préalable indispensable à un projet de supervision IAM.}
+\journalfield{Technologies / outils}{AWS IAM, AWS CLI.}
+\journalfield{Résultats / acquis}{Compréhension du modèle utilisateurs/groupes/rôles/politiques et des risques associés à une mauvaise configuration IAM.}
+\end{journalday}
+
+\begin{journalday}{Vendredi 03/07/2026}{Jour 3}
+\journalfield{Activités réalisées}{Étude d'AWS CloudTrail : notion de \textit{management event}, structure d'un événement (acteur, action, ressource, adresse IP source), cas d'usage en audit et en détection de sécurité.}
+\journalfield{Objectif}{Comprendre comment CloudTrail capture les appels d'API IAM, ce qui conditionne toute la chaîne de détection du futur projet.}
+\journalfield{Technologies / outils}{AWS CloudTrail.}
+\journalfield{Résultats / acquis}{Compréhension du format des événements CloudTrail et de leur exploitation pour la détection d'opérations sensibles.}
+\end{journalday}
+
+\begin{journalday}{Lundi 06/07/2026}{Jour 4}
+\journalfield{Activités réalisées}{Étude d'Amazon EventBridge (règles, \textit{event pattern}, cibles) et d'AWS Lambda (modèle d'exécution serverless, runtimes disponibles, rôle d'exécution IAM).}
+\journalfield{Objectif}{Comprendre le mécanisme de filtrage événementiel et le fonctionnement d'une fonction serverless, briques centrales de l'architecture à concevoir.}
+\journalfield{Technologies / outils}{Amazon EventBridge, AWS Lambda, Python.}
+\journalfield{Résultats / acquis}{Compréhension du couple EventBridge/Lambda comme mécanisme de traitement événementiel en quasi temps réel.}
+\end{journalday}
+
+\begin{journalday}{Mardi 07/07/2026}{Jour 5}
+\journalfield{Activités réalisées}{Étude d'Amazon SNS (topics, abonnements), Amazon S3 (chiffrement, versioning) et Amazon CloudWatch (logs, métriques personnalisées, alarmes). Synthèse de la semaine et cadrage définitif du sujet de projet : plateforme serverless de supervision et d'audit des changements IAM.}
+\journalfield{Objectif}{Clore la phase de découverte AWS en couvrant l'ensemble des services identifiés comme nécessaires, puis formaliser le périmètre du projet à développer.}
+\journalfield{Technologies / outils}{Amazon SNS, Amazon S3, Amazon CloudWatch.}
+\journalfield{Résultats / acquis}{Vision d'ensemble des services AWS mobilisés par le projet ; sujet de stage formalisé autour du dépôt \texttt{aws-iam-monitor}.}
+\journalfield{Observations}{Cette semaine a été consacrée exclusivement à l'apprentissage ; aucun développement n'a encore été entamé sur le projet.}
+\end{journalday}
+
+\phasebanner{Phase 2 --- Développement du projet aws-iam-monitor (08 juillet -- 21 août 2026)}
+
+\journalfigure{aws-iam-monitor-architecture-diagram.png}{0.92}{Architecture cible du projet \texttt{aws-iam-monitor}, retenue à l'issue de la phase de conception (Jour 8) et provisionnée à l'identique par les deux implémentations développées durant cette phase.}
+
+\begin{journalday}{Mercredi 08/07/2026}{Jour 6}
+\journalfield{Activités réalisées}{Analyse du besoin de sécurité : identification des opérations IAM sensibles à surveiller en priorité (\texttt{CreateUser}, \texttt{DeletePolicy}, \texttt{CreateAccessKey}, \texttt{DeactivateMFADevice}, \texttt{AttachUserPolicy}) et des scénarios de menace associés (création de compte non autorisée, désactivation de MFA, escalade de privilèges).}
+\journalfield{Objectif}{Cadrer précisément ce que le système doit détecter avant de concevoir l'architecture technique.}
+\journalfield{Technologies / outils}{AWS IAM, AWS CloudTrail.}
+\journalfield{Résultats / acquis}{Liste des opérations IAM jugées critiques pour la supervision, base de la future logique de classification des risques.}
+\end{journalday}
+
+\begin{journalday}{Jeudi 09/07/2026}{Jour 7}
+\journalfield{Activités réalisées}{Étude approfondie de la manière dont CloudTrail journalise les appels d'API IAM au niveau compte, et réflexion sur le filtrage de ces événements par Amazon EventBridge (event pattern ciblant la source \texttt{iam.amazonaws.com}).}
+\journalfield{Objectif}{Préparer la conception du flux de données qui reliera CloudTrail à la couche de traitement.}
+\journalfield{Technologies / outils}{AWS CloudTrail, Amazon EventBridge.}
+\journalfield{Résultats / acquis}{Principe de filtrage retenu : un \textit{event pattern} EventBridge large sur la source IAM, le filtrage fin des actions surveillées étant délégué à la logique applicative de la Lambda.}
+\end{journalday}
+
+\begin{journalday}{Vendredi 10/07/2026}{Jour 8}
+\journalfield{Activités réalisées}{Conception du flux général de l'architecture : IAM $\rightarrow$ CloudTrail $\rightarrow$ EventBridge $\rightarrow$ Lambda $\rightarrow$ (SNS + S3 + CloudWatch). Choix motivé des services AWS pour chaque étage (capture, filtrage, traitement, notification, archivage, supervision).}
+\journalfield{Objectif}{Fixer une architecture serverless cohérente avant tout développement.}
+\journalfield{Technologies / outils}{AWS CloudTrail, Amazon EventBridge, AWS Lambda, Amazon SNS, Amazon S3, Amazon CloudWatch.}
+\journalfield{Résultats / acquis}{Schéma d'architecture validé, qui servira de référence pour les deux implémentations (Bash et Terraform).}
+\end{journalday}
+
+\begin{journalday}{Lundi 13/07/2026}{Jour 9}
+\journalfield{Activités réalisées}{Conception de la stratégie de classification des risques (niveaux \texttt{CRITICAL}, \texttt{HIGH}, \texttt{MEDIUM}, \texttt{LOW}) et de la logique de \textit{whitelist} d'adresses IP, destinée à qualifier une action IAM comme provenant ou non d'une source de confiance.}
+\journalfield{Objectif}{Définir les règles métier de la fonction Lambda avant son implémentation.}
+\journalfield{Technologies / outils}{AWS Lambda (conception), AWS IAM.}
+\journalfield{Résultats / acquis}{Grille de classification des risques et principe de génération dynamique d'une politique \texttt{IPWhitelistPolicy}.}
+\end{journalday}
+
+\begin{journalday}{Mardi 14/07/2026}{Jour 10}
+\journalfield{Activités réalisées}{Démarrage de l'implémentation Bash/AWS CLI : mise en place de la structure du répertoire \texttt{project/bash/} (bibliothèque partagée \texttt{lib/} avec les fonctions communes, le module de journalisation et la vérification des prérequis) et squelette du script d'orchestration \texttt{awsctl}.}
+\journalfield{Objectif}{Poser une base modulaire et réutilisable avant d'implémenter chaque composant AWS.}
+\journalfield{Technologies / outils}{Bash, AWS CLI.}
+\journalfield{Résultats / acquis}{Squelette fonctionnel de \texttt{awsctl} et bibliothèque d'aide commune aux différents modules.}
+\end{journalday}
+
+\begin{journalday}{Mercredi 15/07/2026}{Jour 11}
+\journalfield{Activités réalisées}{Développement du module IAM (Bash) : création des politiques gérées \texttt{DevPolicy}, \texttt{ProdPolicy} et \texttt{AuditPolicy}, ainsi que des groupes \texttt{DevGroup}, \texttt{ProdGroup} et \texttt{TestGroup}.}
+\journalfield{Objectif}{Mettre en place le bac à sable IAM de démonstration nécessaire au fonctionnement du système.}
+\journalfield{Technologies / outils}{AWS IAM, AWS CLI, Bash.}
+\journalfield{Résultats / acquis}{Politiques et groupes IAM créés de façon scriptée et idempotente.}
+\end{journalday}
+
+\begin{journalday}{Jeudi 16/07/2026}{Jour 12}
+\journalfield{Activités réalisées}{Poursuite du module IAM (Bash) : création des utilisateurs de démonstration (\texttt{DevAdmin}, \texttt{ProdAdmin}, etc.), ajout de l'option \texttt{-r}/\texttt{--role} pour la création optionnelle de rôles IAM, et génération dynamique de la politique \texttt{IPWhitelistPolicy} à partir de la variable \texttt{ALLOWED\_IPS}.}
+\journalfield{Objectif}{Compléter le module IAM avec la gestion des utilisateurs et la logique de restriction par adresse IP.}
+\journalfield{Technologies / outils}{AWS IAM, Bash.}
+\journalfield{Résultats / acquis}{Module IAM complet, incluant la génération conditionnelle de rôles et de la politique de whitelist.}
+\end{journalday}
+
+\begin{journalday}{Vendredi 17/07/2026}{Jour 13}
+\journalfield{Activités réalisées}{Développement du module CloudTrail (Bash) : création du bucket S3 destiné aux journaux (chiffrement AES-256, versioning activé) puis du \textit{trail} CloudTrail capturant les événements de management sur l'ensemble du compte.}
+\journalfield{Objectif}{Mettre en place la source d'événements sur laquelle repose toute la chaîne de détection.}
+\journalfield{Technologies / outils}{AWS CloudTrail, Amazon S3, Bash.}
+\journalfield{Résultats / acquis}{Trail CloudTrail opérationnel, journalisant les appels d'API dans un bucket S3 sécurisé.}
+\end{journalday}
+
+\begin{journalday}{Lundi 20/07/2026}{Jour 14}
+\journalfield{Activités réalisées}{Développement du module SNS (Bash) : création du topic d'alerte \texttt{iam-alerts}, définition de sa politique d'accès, et abonnement automatique d'une adresse e-mail si la variable \texttt{SNS\_ALERT\_EMAIL} est renseignée dans le fichier \texttt{.env}.}
+\journalfield{Objectif}{Mettre en place le canal de notification des événements à haut risque.}
+\journalfield{Technologies / outils}{Amazon SNS, Bash.}
+\journalfield{Résultats / acquis}{Topic SNS fonctionnel avec abonnement e-mail configurable.}
+\end{journalday}
+
+\begin{journalday}{Mardi 21/07/2026}{Jour 15}
+\journalfield{Activités réalisées}{Démarrage du module Lambda (Bash), première partie : création du bucket S3 d'historique d'audit, du rôle d'exécution de la fonction, et packaging initial du code \texttt{lambda\_function.py} (Python 3.11).}
+\journalfield{Objectif}{Préparer l'infrastructure d'exécution avant d'implémenter la logique métier de traitement des événements.}
+\journalfield{Technologies / outils}{AWS Lambda, Python 3.11, Amazon S3, AWS IAM, Bash.}
+\journalfield{Résultats / acquis}{Rôle d'exécution et bucket d'audit provisionnés ; premier déploiement du squelette de la fonction Lambda.}
+\end{journalday}
+
+\begin{journalday}{Mercredi 22/07/2026}{Jour 16}
+\journalfield{Activités réalisées}{Implémentation de la logique de traitement du payload CloudTrail reçu par la fonction Lambda, et de la vérification de l'adresse IP source de l'appel d'API par rapport à la politique de whitelist définie précédemment.}
+\journalfield{Objectif}{Permettre à la fonction de distinguer une opération IAM légitime d'une opération provenant d'une source non autorisée.}
+\journalfield{Technologies / outils}{Python, AWS Lambda.}
+\journalfield{Résultats / acquis}{Fonction capable d'extraire les champs pertinents de l'événement et de qualifier la source de l'appel.}
+\end{journalday}
+
+\begin{journalday}{Jeudi 23/07/2026}{Jour 17}
+\journalfield{Activités réalisées}{Implémentation de la classification du niveau de risque de chaque événement IAM et de l'archivage structuré des enregistrements JSON dans le bucket S3 d'audit, organisés par date (\texttt{YYYY/MM/DD/}).}
+\journalfield{Objectif}{Assurer la traçabilité complète des événements IAM traités, quel que soit leur niveau de risque.}
+\journalfield{Technologies / outils}{Python, Amazon S3, AWS Lambda.}
+\journalfield{Résultats / acquis}{Chaque événement traité est classé et archivé de façon structurée et exploitable a posteriori.}
+\end{journalday}
+
+\begin{journalday}{Vendredi 24/07/2026}{Jour 18}
+\journalfield{Activités réalisées}{Implémentation de l'émission de métriques personnalisées CloudWatch (namespace \texttt{AWSIAMMonitor}) et de la publication d'alertes SNS pour les événements classés à risque élevé, achevant ainsi la logique métier de la fonction Lambda.}
+\journalfield{Objectif}{Compléter la fonction de traitement afin qu'elle notifie et alimente la supervision, en plus de journaliser.}
+\journalfield{Technologies / outils}{Amazon CloudWatch, Amazon SNS, Python.}
+\journalfield{Résultats / acquis}{Fonction Lambda fonctionnellement complète : analyse, classification, archivage, alerte et métriques.}
+\end{journalday}
+
+\journalfigure{mail/hight-risk-aws-iam-security-alert-create-user.png}{0.72}{Exemple d'alerte SNS reçue par e-mail pour un événement IAM classé à risque élevé (\texttt{CreateUser}).}
+
+\begin{journalday}{Lundi 27/07/2026}{Jour 19}
+\journalfield{Activités réalisées}{Développement du module EventBridge (Bash) : création de la règle de filtrage des événements IAM, rattachement de la fonction Lambda comme cible, et attribution de la permission d'invocation nécessaire.}
+\journalfield{Objectif}{Fermer la boucle événementielle en connectant CloudTrail à la fonction Lambda via EventBridge.}
+\journalfield{Technologies / outils}{Amazon EventBridge, AWS Lambda, Bash.}
+\journalfield{Résultats / acquis}{Chaîne complète CloudTrail $\rightarrow$ EventBridge $\rightarrow$ Lambda opérationnelle de bout en bout.}
+\end{journalday}
+
+\begin{journalday}{Mardi 28/07/2026}{Jour 20}
+\journalfield{Activités réalisées}{Finalisation de l'orchestration \texttt{awsctl} : implémentation des actions \texttt{--up}/\texttt{--down}/\texttt{--status}/\texttt{--test}, des cibles (\texttt{all}, \texttt{iam}, \texttt{cloud-trail}, \texttt{sns}, \texttt{lambda}, \texttt{event-bridge}) et des options (\texttt{-r}, \texttt{-v}, \texttt{-h}).}
+\journalfield{Objectif}{Offrir une interface en ligne de commande unique pour piloter l'ensemble de l'infrastructure Bash.}
+\journalfield{Technologies / outils}{Bash, AWS CLI.}
+\journalfield{Résultats / acquis}{\texttt{awsctl} permet de provisionner, auditer et détruire chaque composant individuellement ou l'ensemble de l'infrastructure.}
+\end{journalday}
+
+\begin{journalday}{Mercredi 29/07/2026}{Jour 21}
+\journalfield{Activités réalisées}{Mise en place de l'ordre de déploiement en 5 étapes (IAM $\rightarrow$ CloudTrail $\rightarrow$ SNS $\rightarrow$ Lambda $\rightarrow$ EventBridge) et gestion de la propagation IAM lors de la création de la fonction Lambda par une boucle de nouvelles tentatives avec temporisation.}
+\journalfield{Objectif}{Fiabiliser l'enchaînement des créations de ressources malgré la latence de propagation IAM côté AWS.}
+\journalfield{Technologies / outils}{Bash, AWS CLI, AWS IAM.}
+\journalfield{Résultats / acquis}{Déploiement séquencé fiable, y compris lorsque le rôle IAM n'est pas immédiatement assumable par Lambda.}
+\end{journalday}
+
+\begin{journalday}{Jeudi 30/07/2026}{Jour 22}
+\journalfield{Activités réalisées}{Revue et amélioration de l'idempotence des scripts Bash : vérification systématique de l'existence d'une ressource avant création, et gestion propre des cas de mise à jour plutôt que de duplication.}
+\journalfield{Objectif}{Permettre de relancer \texttt{awsctl --up} sans provoquer d'erreurs ni de doublons de ressources.}
+\journalfield{Technologies / outils}{Bash, AWS CLI.}
+\journalfield{Résultats / acquis}{Scripts robustes à une exécution répétée, comportement attendu d'une infrastructure gérée de façon impérative.}
+\end{journalday}
+
+\begin{journalday}{Vendredi 31/07/2026}{Jour 23}
+\journalfield{Activités réalisées}{Tests de bout en bout de l'implémentation Bash : \texttt{./awsctl --up all} pour le déploiement complet, \texttt{./awsctl --status all} pour la vérification, puis \texttt{./awsctl --down all} pour la désinstallation propre de l'ensemble des ressources.}
+\journalfield{Objectif}{Valider que l'implémentation Bash provisionne et détruit correctement l'intégralité de l'architecture.}
+\journalfield{Technologies / outils}{Bash, AWS CLI.}
+\journalfield{Résultats / acquis}{Cycle complet provisioning/vérification/destruction validé sur l'implémentation Bash.}
+\journalfield{Observations}{Cette validation clôture la première implémentation ; la suite du stage est consacrée à l'implémentation Terraform équivalente.}
+\end{journalday}
+
+\begin{journalday}{Lundi 03/08/2026}{Jour 24}
+\journalfield{Activités réalisées}{Démarrage de l'implémentation Terraform : mise en place de la structure du répertoire \texttt{project/terraform/} (\texttt{main.tf}, \texttt{variables.tf}, \texttt{outputs.tf}, \texttt{providers.tf}, \texttt{versions.tf}, \texttt{locals.tf}).}
+\journalfield{Objectif}{Poser les fondations d'une implémentation déclarative équivalente à l'implémentation Bash.}
+\journalfield{Technologies / outils}{Terraform, AWS Provider.}
+\journalfield{Résultats / acquis}{Squelette du projet Terraform mis en place, prêt à accueillir les modules.}
+\end{journalday}
+
+\begin{journalday}{Mardi 04/08/2026}{Jour 25}
+\journalfield{Activités réalisées}{Développement du module Terraform \texttt{s3} : bucket générique et réutilisable gérant chiffrement, versioning et blocage de l'accès public, instancié deux fois (bucket de logs CloudTrail et bucket d'historique d'audit).}
+\journalfield{Objectif}{Factoriser la logique de création de bucket S3, commune aux deux usages du projet.}
+\journalfield{Technologies / outils}{Terraform, Amazon S3.}
+\journalfield{Résultats / acquis}{Module \texttt{s3} générique, sans politique de bucket propre (déléguée à l'appelant), prêt à être réutilisé.}
+\end{journalday}
+
+\begin{journalday}{Mercredi 05/08/2026}{Jour 26}
+\journalfield{Activités réalisées}{Développement du module Terraform \texttt{cloudtrail} : création du trail et de la politique de bucket S3 spécifique à CloudTrail, appliquée sur l'instance du module \texttt{s3} dédiée aux journaux.}
+\journalfield{Objectif}{Reproduire en Terraform le comportement du module CloudTrail Bash.}
+\journalfield{Technologies / outils}{Terraform, AWS CloudTrail.}
+\journalfield{Résultats / acquis}{Module \texttt{cloudtrail} fonctionnel, cohérent avec l'implémentation Bash.}
+\end{journalday}
+
+\begin{journalday}{Jeudi 06/08/2026}{Jour 27}
+\journalfield{Activités réalisées}{Développement du module Terraform \texttt{iam} : bac à sable IAM de démonstration (politiques, groupes, utilisateurs, rôles optionnels) et génération dynamique de la politique de whitelist IP, module autonome sans dépendance croisée.}
+\journalfield{Objectif}{Porter la logique IAM du projet vers une approche entièrement déclarative.}
+\journalfield{Technologies / outils}{Terraform, AWS IAM.}
+\journalfield{Résultats / acquis}{Module \texttt{iam} Terraform équivalent fonctionnellement au module Bash correspondant.}
+\end{journalday}
+
+\begin{journalday}{Vendredi 07/08/2026}{Jour 28}
+\journalfield{Activités réalisées}{Développement du module Terraform \texttt{sns} : topic d'alerte de sécurité, politique du topic et abonnement e-mail optionnel, piloté par les variables Terraform.}
+\journalfield{Objectif}{Reproduire le canal de notification en configuration entièrement pilotée par variables (\texttt{terraform.tfvars}).}
+\journalfield{Technologies / outils}{Terraform, Amazon SNS.}
+\journalfield{Résultats / acquis}{Module \texttt{sns} Terraform opérationnel, sans dépendance au fichier \texttt{.env} de l'implémentation Bash.}
+\end{journalday}
+
+\begin{journalday}{Lundi 10/08/2026}{Jour 29}
+\journalfield{Activités réalisées}{Développement du module Terraform \texttt{lambda} : fonction de supervision, rôle et politique d'exécution, packaging du code source partagé avec l'implémentation Bash, redéploiement automatique piloté par \texttt{source\_code\_hash}.}
+\journalfield{Objectif}{Éviter la duplication du code Python en réutilisant la même source Lambda pour les deux implémentations, tout en automatisant son déploiement.}
+\journalfield{Technologies / outils}{Terraform, AWS Lambda, Python.}
+\journalfield{Résultats / acquis}{Détection automatique des changements de code Lambda et redéploiement déclaratif sans étape de packaging manuelle.}
+\end{journalday}
+
+\begin{journalday}{Mardi 11/08/2026}{Jour 30}
+\journalfield{Activités réalisées}{Développement du module Terraform \texttt{eventbridge} (règle de filtrage, cible Lambda, permission d'invocation) et intégration de l'ensemble des modules dans le fichier \texttt{main.tf} racine.}
+\journalfield{Objectif}{Assembler les modules développés jusqu'ici en une architecture complète et cohérente.}
+\journalfield{Technologies / outils}{Terraform, Amazon EventBridge.}
+\journalfield{Résultats / acquis}{Architecture Terraform assemblée, l'ordre de déploiement étant résolu automatiquement par le graphe de dépendances des modules.}
+\end{journalday}
+
+\begin{journalday}{Mercredi 12/08/2026}{Jour 31}
+\journalfield{Activités réalisées}{Développement du module Terraform \texttt{cloudwatch} : groupe de logs de la fonction Lambda et alarmes optionnelles (\texttt{UnauthorizedIPAccess}, erreurs de la fonction Lambda), publiant vers le topic SNS existant.}
+\journalfield{Objectif}{Ajouter une amélioration propre à l'implémentation Terraform, absente de l'implémentation Bash : l'exploitation active des métriques via des alarmes.}
+\journalfield{Technologies / outils}{Terraform, Amazon CloudWatch, Amazon SNS.}
+\journalfield{Résultats / acquis}{Alarmes CloudWatch optionnelles (activées par défaut via la variable \texttt{enable\_cloudwatch\_alarms}) déclenchant une notification SNS.}
+\end{journalday}
+
+\begin{journalday}{Vendredi 14/08/2026}{Jour 32}
+\journalfield{Activités réalisées}{Exécution complète du cycle \texttt{terraform init} / \texttt{plan} / \texttt{apply} sur l'ensemble des modules, puis vérification de l'équivalence fonctionnelle de l'architecture obtenue avec celle provisionnée par l'implémentation Bash.}
+\journalfield{Objectif}{Valider que l'implémentation Terraform provisionne la même architecture cible que l'implémentation Bash.}
+\journalfield{Technologies / outils}{Terraform, AWS CLI.}
+\journalfield{Résultats / acquis}{Déploiement Terraform validé de bout en bout, avec les mêmes noms de ressources par défaut que l'implémentation Bash.}
+\end{journalday}
+
+\begin{journalday}{Lundi 17/08/2026}{Jour 33}
+\journalfield{Activités réalisées}{Comparaison détaillée des deux implémentations : portée plus stricte des permissions IAM de la Lambda côté Terraform, blocage explicite de l'accès public S3, et remplacement de la boucle de nouvelles tentatives Bash par une temporisation déterministe (\texttt{time\_sleep}).}
+\journalfield{Objectif}{Documenter précisément les différences volontaires entre les deux approches, au-delà de leur équivalence fonctionnelle globale.}
+\journalfield{Technologies / outils}{Terraform, AWS IAM, Amazon S3.}
+\journalfield{Résultats / acquis}{Tableau de comparaison technique Bash / Terraform consolidé.}
+\end{journalday}
+
+\begin{journalday}{Mardi 18/08/2026}{Jour 34}
+\journalfield{Activités réalisées}{Réflexion sur la sécurisation de l'état Terraform : limites du \textit{backend} local (\texttt{terraform.tfstate}) pour un usage en équipe, et étude d'un \textit{backend} distant S3 avec verrouillage DynamoDB pour un déploiement partagé.}
+\journalfield{Objectif}{Anticiper les besoins d'un usage collaboratif de l'infrastructure Terraform, au-delà du cadre expérimental du stage.}
+\journalfield{Technologies / outils}{Terraform, Amazon S3, Amazon DynamoDB (étude).}
+\journalfield{Résultats / acquis}{Recommandations documentées sur la sécurité de l'état Terraform et la configuration d'un backend distant.}
+\end{journalday}
+
+\begin{journalday}{Mercredi 19/08/2026}{Jour 35}
+\journalfield{Activités réalisées}{Rédaction de la documentation technique du projet : \texttt{ARCHITECTURE.md} (schéma et tableau des services), \texttt{INSTALL.md} (prérequis des deux implémentations) et \texttt{USAGE.md} (référence complète des commandes \texttt{awsctl} et Terraform).}
+\journalfield{Objectif}{Rendre le projet exploitable et compréhensible par une tierce personne sans connaissance préalable.}
+\journalfield{Technologies / outils}{Markdown, Git.}
+\journalfield{Résultats / acquis}{Documentation technique du dépôt consolidée et à jour avec l'état final du code.}
+\end{journalday}
+
+\begin{journalday}{Jeudi 20/08/2026}{Jour 36}
+\journalfield{Activités réalisées}{Mise en place et génération du site de documentation Sphinx (\texttt{docapi}), avec build local via \texttt{make docs} et prévisualisation du rendu HTML.}
+\journalfield{Objectif}{Offrir une documentation navigable et centralisée du projet, complémentaire aux fichiers Markdown du dépôt.}
+\journalfield{Technologies / outils}{Sphinx, Make.}
+\journalfield{Résultats / acquis}{Site de documentation généré localement, structurant l'ensemble des pages Markdown existantes.}
+\end{journalday}
+
+\begin{journalday}{Vendredi 21/08/2026}{Jour 37}
+\journalfield{Activités réalisées}{Revue globale de l'architecture et du dépôt : relecture croisée des modules Bash et Terraform, nettoyage des fichiers de configuration d'exemple (\texttt{.env.example}, \texttt{terraform.tfvars.example}) et mise à jour du \texttt{CHANGELOG.md}.}
+\journalfield{Objectif}{Clôturer la phase de développement sur une base de code propre et cohérente avant d'entamer la rédaction des livrables finaux.}
+\journalfield{Technologies / outils}{Git, Bash, Terraform.}
+\journalfield{Résultats / acquis}{Dépôt \texttt{aws-iam-monitor} dans un état stable, documenté et considéré comme fonctionnellement complet pour les deux implémentations.}
+\journalfield{Observations}{Cette journée marque la fin de la phase de développement technique ; la dernière semaine du stage sera consacrée à la documentation et à la préparation de la soutenance.}
+\end{journalday}
+
+\phasebanner{Phase 3 --- Finalisation, documentation et soutenance (24 -- 31 août 2026)}
+
+\begin{journalday}{Lundi 24/08/2026}{Jour 38}
+\journalfield{Activités réalisées}{Reconstruction et rédaction du journal de stage jour par jour, à partir de l'historique réel des travaux menés sur le dépôt \texttt{aws-iam-monitor} et des notes d'apprentissage AWS.}
+\journalfield{Objectif}{Disposer d'une trace fidèle et détaillée du déroulement du stage pour la soutenance et l'évaluation.}
+\journalfield{Technologies / outils}{Traitement de texte, Git (historique du dépôt).}
+\journalfield{Résultats / acquis}{Premier jet complet du journal de stage.}
+\end{journalday}
+
+\begin{journalday}{Mercredi 26/08/2026}{Jour 39}
+\journalfield{Activités réalisées}{Rédaction des premiers chapitres du rapport de stage : contexte général, étude préalable du problème de sécurité IAM, et chapitre d'étude et de conception de la solution.}
+\journalfield{Objectif}{Formaliser par écrit la démarche d'analyse et de conception ayant précédé le développement.}
+\journalfield{Technologies / outils}{Traitement de texte.}
+\journalfield{Résultats / acquis}{Chapitres 1 et 2 du rapport rédigés.}
+\end{journalday}
+
+\begin{journalday}{Jeudi 27/08/2026}{Jour 40}
+\journalfield{Activités réalisées}{Rédaction des chapitres du rapport consacrés à la réalisation technique (par composant : IAM, CloudTrail, EventBridge, Lambda, SNS, S3, CloudWatch, Bash, Terraform) ainsi qu'au déploiement, à la validation et aux résultats.}
+\journalfield{Objectif}{Détailler par écrit le travail de développement réellement effectué, en cohérence avec le journal de stage.}
+\journalfield{Technologies / outils}{Traitement de texte.}
+\journalfield{Résultats / acquis}{Chapitres 3 et 4 du rapport rédigés.}
+\end{journalday}
+
+\begin{journalday}{Vendredi 28/08/2026}{Jour 41}
+\journalfield{Activités réalisées}{Rédaction du bilan des compétences acquises, des perspectives d'amélioration du projet et de la conclusion générale du rapport ; relecture et mise en forme de l'ensemble du document.}
+\journalfield{Objectif}{Clore la rédaction du rapport par une synthèse fidèle du travail accompli et de ses limites.}
+\journalfield{Technologies / outils}{Traitement de texte.}
+\journalfield{Résultats / acquis}{Chapitre 5 et conclusion générale rédigés ; rapport de stage complet.}
+\end{journalday}
+
+\begin{journalday}{Lundi 31/08/2026}{Jour 42}
+\journalfield{Activités réalisées}{Préparation de la soutenance : structuration du support de présentation, sélection des points techniques clés à démontrer (architecture, comparaison Bash/Terraform, classification des risques), et répétition des explications.}
+\journalfield{Objectif}{Se présenter à la soutenance avec un support clair et une explication maîtrisée du projet.}
+\journalfield{Technologies / outils}{Outil de présentation.}
+\journalfield{Résultats / acquis}{Support de présentation finalisé, dernier jour du stage.}
+\journalfield{Observations}{Fin du stage.}
+\end{journalday}
+
+\end{document}

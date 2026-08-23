@@ -1,0 +1,870 @@
+\documentclass[11pt,a4paper]{report}
+
+\usepackage[utf8]{inputenc}
+\usepackage[T1]{fontenc}
+\usepackage[english]{babel}
+\usepackage[margin=2.5cm]{geometry}
+\usepackage{titlesec}
+\usepackage{enumitem}
+\usepackage{xcolor}
+\usepackage{tcolorbox}
+\tcbuselibrary{skins,breakable}
+\usepackage{fancyhdr}
+\usepackage{tabularx}
+\usepackage{longtable}
+\usepackage{booktabs}
+\usepackage{graphicx}
+\usepackage{hyperref}
+\usepackage{parskip}
+\usepackage{lastpage}
+\usepackage{listings}
+
+\graphicspath{{../img/}}
+
+% ---------- Colors ----------
+\definecolor{primaryblue}{RGB}{20,50,90}
+\definecolor{accentorange}{RGB}{214,110,40}
+\definecolor{lightgray}{RGB}{242,242,242}
+\definecolor{textgray}{RGB}{80,80,80}
+\definecolor{codebg}{RGB}{247,247,247}
+
+% ---------- Hyperref ----------
+\hypersetup{
+  colorlinks=true,
+  linkcolor=primaryblue,
+  urlcolor=primaryblue,
+  citecolor=primaryblue,
+  pdftitle={aws-iam-monitor v1.2.0 -- Full Documentation},
+  pdfauthor={ZouariOmar},
+  pdfsubject={aws-iam-monitor -- Full Technical Documentation},
+  bookmarksnumbered=true,
+}
+
+% ---------- Code listings ----------
+\lstset{
+  basicstyle=\ttfamily\small,
+  backgroundcolor=\color{codebg},
+  frame=single,
+  rulecolor=\color{textgray},
+  breaklines=true,
+  columns=fullflexible,
+  showstringspaces=false,
+}
+
+% ---------- Titles ----------
+\titleformat{\chapter}[display]
+  {\normalfont\bfseries\color{primaryblue}}
+  {\Large\filright\chaptertitlename~\thechapter}
+  {6pt}
+  {\Huge}
+\titlespacing*{\chapter}{0pt}{0pt}{24pt}
+
+\titleformat{\section}
+  {\normalfont\Large\bfseries\color{primaryblue}}
+  {\thesection}{0.6em}{}[{\color{primaryblue}\titlerule[0.8pt]}]
+\titleformat{\subsection}
+  {\normalfont\large\bfseries\color{primaryblue}}
+  {\thesubsection}{0.6em}{}
+\titleformat{\subsubsection}
+  {\normalfont\bfseries\color{textgray}}
+  {\thesubsubsection}{0.6em}{}
+\titlespacing*{\section}{0pt}{16pt}{8pt}
+\titlespacing*{\subsection}{0pt}{12pt}{6pt}
+
+% ---------- Header / footer ----------
+\pagestyle{fancy}
+\fancyhf{}
+\renewcommand{\headrulewidth}{0.4pt}
+\renewcommand{\footrulewidth}{0.4pt}
+\fancyhead[L]{\small\color{textgray}\nouppercase{\leftmark}}
+\fancyhead[R]{\small\color{textgray} aws-iam-monitor v1.2.0}
+\fancyfoot[C]{\small\color{textgray} Page \thepage\ / \pageref{LastPage}}
+
+\fancypagestyle{plain}{
+  \fancyhf{}
+  \fancyfoot[C]{\small\color{textgray} Page \thepage\ / \pageref{LastPage}}
+  \renewcommand{\headrulewidth}{0pt}
+}
+
+% ---------- Utility boxes ----------
+\newtcolorbox{keybox}[1]{
+  enhanced, breakable,
+  colback=lightgray, colframe=primaryblue,
+  boxrule=0.5pt, arc=2pt,
+  left=8pt, right=8pt, top=6pt, bottom=6pt,
+  title={#1}, coltitle=white, colbacktitle=primaryblue,
+  fonttitle=\bfseries,
+}
+
+\newtcolorbox{notebox}[1][Note]{
+  enhanced, breakable,
+  colback=white, colframe=accentorange,
+  boxrule=0.6pt, arc=2pt,
+  left=8pt, right=8pt, top=5pt, bottom=5pt,
+  title={#1}, coltitle=white, colbacktitle=accentorange,
+  fonttitle=\bfseries\small,
+  fontupper=\small,
+}
+
+\newcommand{\techtable}[3]{%
+\begin{center}
+\renewcommand{\arraystretch}{1.3}
+\begin{tabularx}{\linewidth}{l X}
+\toprule
+\textbf{#2} & \textbf{#3} \\
+\midrule
+#1
+\bottomrule
+\end{tabularx}
+\end{center}
+}
+
+\newcommand{\docfigure}[3]{%
+  \begin{figure}[h]
+    \centering
+    \includegraphics[width=#2\linewidth]{#1}
+    \caption{\small #3}
+  \end{figure}
+}
+
+\begin{document}
+\pagenumbering{gobble}
+
+% ======================= TITLE PAGE =======================
+\begin{titlepage}
+\centering
+\vspace*{0.5cm}
+
+\includegraphics[width=0.42\linewidth]{aws-iam-monitor-full-logo.png}\\[1cm]
+
+\rule{0.85\linewidth}{0.8pt}\\[0.7cm]
+
+{\Large \color{textgray} Full Technical Documentation}\\[0.5cm]
+{\Huge \bfseries \color{primaryblue} aws-iam-monitor}\\[0.4cm]
+{\Large \color{primaryblue} Real-time AWS IAM Auditing, Security Monitoring and Automated Threat Detection Platform}\\[0.7cm]
+
+\rule{0.85\linewidth}{0.8pt}\\[1cm]
+
+\begin{center}
+\begin{tabularx}{0.82\linewidth}{@{}l X@{}}
+\textbf{Version:} & 1.2.0 \\[6pt]
+\textbf{Author:} & ZouariOmar \\[6pt]
+\textbf{License:} & Apache-2.0 \\[6pt]
+\textbf{Repository:} & \url{https://github.com/ZouariOmar/aws-iam-monitor} \\[6pt]
+\textbf{Contact:} & \url{zouariomar20@gmail.com} \\
+\end{tabularx}
+\end{center}
+
+\vfill
+
+{\small \color{textgray} This document consolidates the project's reference documentation --
+overview, architecture, installation, usage and security -- into a single,
+self-contained technical reference for the \texttt{aws-iam-monitor} v1.2.0
+release.}
+
+\end{titlepage}
+
+\pagenumbering{roman}
+\tableofcontents
+\newpage
+\pagenumbering{arabic}
+
+% ======================= CHAPTER: OVERVIEW =======================
+\chapter{Overview}
+
+\section{Introduction}
+
+\textbf{aws-iam-monitor} is a production-ready, serverless AWS security
+solution designed to provide continuous, real-time visibility into Identity
+and Access Management (IAM) changes across AWS accounts and AWS
+Organizations.
+
+By capturing management events from \textbf{AWS CloudTrail}, filtering
+events with \textbf{Amazon EventBridge}, and processing security payloads
+with \textbf{AWS Lambda}, the system detects unauthorized modifications,
+privilege escalation risks, new credential creation, and policy tampering
+within seconds. High-risk events immediately trigger \textbf{Amazon SNS}
+notifications (with optional automated email subscriptions) while
+maintaining structured audit logs in \textbf{Amazon S3} and custom
+performance metrics in \textbf{Amazon CloudWatch}.
+
+\section{Key Features}
+
+\begin{itemize}[leftmargin=1.4em]
+  \item \textbf{Real-time Event Detection}: Instant detection of sensitive IAM operations (e.g. \texttt{CreateUser}, \texttt{DeletePolicy}, \texttt{CreateAccessKey}, \texttt{DeactivateMFADevice}, \texttt{AttachUserPolicy}).
+  \item \textbf{IP Whitelisting \& Enforcement}: Automated generation of \texttt{IPWhitelistPolicy} and real-time source IP validation within the monitoring Lambda.
+  \item \textbf{Risk Classification}: Automated risk grading (\texttt{CRITICAL}, \texttt{HIGH}, \texttt{MEDIUM}, \texttt{LOW}) for every IAM API call.
+  \item \textbf{Dedicated SNS Management Component}: Dedicated \texttt{sns} module with automated email alert subscriptions via \texttt{.env} or CLI parameters.
+  \item \textbf{Audit Trail Archiving}: Every IAM event is saved as a structured JSON record in Amazon S3 grouped by date (\texttt{YYYY/MM/DD/}).
+  \item \textbf{CloudWatch Metrics}: Emits custom \texttt{AWSIAMMonitor} metrics for CloudWatch dashboards and alarm creation.
+  \item \textbf{Idempotent Infrastructure}: Both the Bash CLI (\texttt{awsctl}) and the Terraform implementation create, update, and delete resources safely without duplication.
+  \item \textbf{Two Equivalent Implementations}: An imperative Bash/AWS-CLI CLI and a declarative Terraform implementation, pick whichever fits your workflow.
+\end{itemize}
+
+\section{Repository Structure}
+
+\begin{lstlisting}
+aws-iam-monitor/
+|-- Makefile
+|-- README.md
+|-- ARCHITECTURE.md
+|-- INSTALL.md
+|-- USAGE.md
+|-- SECURITY.md
+|-- SUPPORT.md
+|-- project/
+|   |-- bash/                       # Bash / AWS CLI implementation
+|   |   |-- .env.example            # Environment configuration template
+|   |   |-- awsctl                  # Primary orchestration CLI binary
+|   |   |-- lib/                    # Shared helper library
+|   |   |-- iam/                    # IAM module
+|   |   |-- cloud-trail/            # CloudTrail module
+|   |   |-- sns/                    # SNS module
+|   |   |-- event-bridge/           # EventBridge module
+|   |   |-- lambda/                 # Lambda module
+|   |   |-- Makefile                # Bash implementation Makefile
+|   |   `-- README.md               # Bash implementation reference
+|   `-- terraform/                  # Terraform implementation
+|       |-- main.tf                 # Module wiring
+|       |-- variables.tf            # Input variables
+|       |-- outputs.tf              # Output values
+|       |-- providers.tf            # AWS provider configuration
+|       |-- versions.tf             # Terraform & provider version constraints
+|       |-- locals.tf               # Computed values
+|       |-- terraform.tfvars.example
+|       |-- modules/                # iam, cloudtrail, sns, lambda,
+|       |                           # eventbridge, s3, cloudwatch
+|       |-- Makefile                # Terraform implementation Makefile
+|       `-- README.md               # Terraform implementation reference
+|-- docapi/                         # Sphinx documentation site source
+`-- res/                            # Documentation assets & logos
+\end{lstlisting}
+
+\section{Documentation Map}
+
+\techtable{
+README.md & Project overview, key features, quickstart. \\
+ARCHITECTURE.md & Architecture diagram, AWS services table, deployment ordering. \\
+INSTALL.md & Prerequisites, requirements, and setup for both implementations. \\
+USAGE.md & Full Bash (\texttt{awsctl}) and Terraform CLI/command reference, deployment examples. \\
+SECURITY.md & Security policy, vulnerability reporting, security best practices. \\
+project/bash/README.md & Bash implementation deep reference. \\
+project/terraform/README.md & Terraform implementation deep reference, including differences from Bash. \\
+docapi (Sphinx site) & Full documentation site source, built with \texttt{make docs}. \\
+}{Document}{Covers}
+
+% ======================= CHAPTER: ARCHITECTURE =======================
+\chapter{Architecture}
+
+This architecture is provisioned identically by both implementations; see
+Chapter~\ref{chap:usage} to deploy it via either \texttt{project/bash/}
+(imperative) or \texttt{project/terraform/} (declarative).
+
+\section{System Data Flow}
+
+The architecture follows an event-driven serverless pattern:
+
+\begin{center}
+\begin{tcolorbox}[colback=lightgray, colframe=primaryblue, arc=2pt, boxrule=0.5pt]
+\centering
+\textbf{IAM Activity Sources} (users, CI/CD pipelines, or a compromised key) \\
+$\downarrow$ \\
+\textbf{AWS CloudTrail} (management event capture) \\
+$\downarrow$ \\
+\textbf{Amazon EventBridge} (IAM API event rule filter) \\
+$\downarrow$ \\
+\textbf{AWS Lambda -- Python 3.11} (event parsing, IP validation, risk classification) \\
+$\downarrow$ \\
+\textbf{Amazon SNS} (security alerts) \quad + \quad \textbf{Amazon S3} (JSON audit archival) \quad + \quad \textbf{Amazon CloudWatch} (logs, metrics, alarms)
+\end{tcolorbox}
+\end{center}
+
+\docfigure{aws-iam-monitor-architecture-diagram.png}{0.95}{Full architecture diagram of \texttt{aws-iam-monitor}, identical across both the Bash and Terraform implementations.}
+
+\section{AWS Services \& Responsibilities}
+
+\techtable{
+AWS IAM & Customer-managed policies, groups, users, execution roles, and trust policies. \\
+AWS CloudTrail & Captures AWS account management events and API calls across the account. \\
+Amazon EventBridge & Evaluates CloudTrail events against IAM pattern filters and invokes Lambda. \\
+AWS Lambda & Python 3.11 handler: source IP validation, risk classification, S3 audit logging, SNS alert publishing, CloudWatch metric emission. \\
+Amazon SNS & Topic, topic policy, and email subscription management for security alerts. \\
+Amazon S3 & Server-side encrypted (AES-256), versioned storage for CloudTrail logs and historical IAM audit records. \\
+Amazon CloudWatch & Log group retention management, custom metrics (\texttt{AWSIAMMonitor}), and alarms. \\
+}{AWS Service}{Purpose}
+
+\section{Deployment Ordering}
+
+The Bash implementation provisions this architecture as an explicit 5-stage
+sequence (\texttt{./awsctl --up all}); the Terraform implementation resolves
+the same ordering automatically from its module dependency graph
+(\texttt{terraform apply}); both converge on the same end state.
+
+\begin{enumerate}[leftmargin=1.6em]
+  \item \textbf{IAM}: Customer-managed policies (\texttt{DevPolicy}, \texttt{ProdPolicy}, \texttt{AuditPolicy}), groups, users, and optional execution roles.
+  \item \textbf{CloudTrail}: S3 log bucket and CloudTrail management events trail.
+  \item \textbf{SNS}: Alert topic (\texttt{iam-alerts}), topic policy, and email subscription.
+  \item \textbf{Lambda}: S3 audit history bucket, execution role, packaged \texttt{lambda\_function.py}, and CloudWatch log group.
+  \item \textbf{EventBridge}: Rule pattern registration, Lambda target attachment, and invocation permission.
+\end{enumerate}
+
+Teardown (\texttt{./awsctl --down all} / \texttt{terraform destroy}) reverses
+this order.
+
+\section{Terraform vs. Bash}
+
+Both implementations provision the same architecture described above; they
+are independent, equivalent implementations, not a sequential pipeline versus
+a functionally different declarative one. Terraform additionally provisions
+optional CloudWatch alarms on the metrics Lambda already emits
+(\texttt{UnauthorizedIPAccess} and function \texttt{Errors}), which is a
+Terraform-only enhancement, not a divergence in required behavior.
+
+\begin{center}
+\renewcommand{\arraystretch}{1.35}
+{\small
+\begin{tabularx}{\linewidth}{X X X}
+\toprule
+\textbf{Aspect} & \textbf{Bash / AWS CLI} & \textbf{Terraform} \\
+\midrule
+Approach & Imperative (explicit command sequence) & Declarative (target state described, order resolved automatically) \\
+Lambda IAM permissions & Broad scope (\texttt{S3AuditHistory}, \texttt{Resource: "*"} for SNS) & Strictly scoped to exact resources (reinforced least privilege) \\
+S3 public access & Not explicitly blocked & Explicitly blocked on both buckets \\
+IAM propagation wait & 6-attempt retry loop with a 10s delay & Deterministic single wait (\texttt{time\_sleep}, 10s) \\
+Lambda code deployment & Manual SHA-256 hash comparison & Automatic via \texttt{source\_code\_hash} \\
+CloudWatch alarms & Absent (metrics emitted but unused) & Optional, enabled by default \\
+Reproducibility & High, dependent on script execution order & High, guaranteed by the dependency graph \\
+Maintenance & Simple for small, targeted changes & Facilitated by modularity and declarative state for complex changes \\
+\bottomrule
+\end{tabularx}
+}
+\end{center}
+
+\begin{notebox}[Note]
+See \texttt{project/terraform/README.md} (section ``Differences from the
+Bash implementation'') for the complete comparison. Outside these assumed
+differences, resource naming, the EventBridge event pattern, the IAM policy
+documents (\texttt{DevPolicy}, \texttt{ProdPolicy}, \texttt{AuditPolicy},
+\texttt{IPWhitelistPolicy}) and the SNS topic policy remain strictly
+identical between both implementations.
+\end{notebox}
+
+% ======================= CHAPTER: INSTALLATION =======================
+\chapter{Installation}
+
+\textbf{aws-iam-monitor} ships two independent, equivalent infrastructure
+implementations; install prerequisites for whichever you plan to use (or
+both). See Chapter~\ref{chap:usage} once installed, for the CLI reference of
+both.
+
+\section{Clone Repository}
+
+\begin{lstlisting}
+git clone https://github.com/ZouariOmar/aws-iam-monitor.git
+cd aws-iam-monitor
+\end{lstlisting}
+
+\section{Requirements}
+
+\begin{itemize}[leftmargin=1.4em]
+  \item Git
+  \item An AWS Account with access to: CloudTrail, EventBridge, Lambda, STS AssumeRole, SNS, S3, CloudWatch
+  \item Make (optional, but recommended, wraps both implementations)
+\end{itemize}
+
+\subsection{Bash Implementation}
+
+\begin{itemize}[leftmargin=1.4em]
+  \item \textbf{Operating System}: Linux / macOS
+  \item \textbf{Shell}: Bash v5.0+
+  \item \texttt{aws-cli} (v2.0+)
+  \item \texttt{jq} (v1.6+)
+  \item \texttt{sed} (v4.10+)
+  \item \texttt{zip} (v3.0+)
+  \item \texttt{openssl} (v3.6+)
+  \item \texttt{python3} (v3.11+)
+\end{itemize}
+
+\subsection{Terraform Implementation}
+
+\begin{itemize}[leftmargin=1.4em]
+  \item Terraform >= 1.5.0
+  \item The same AWS account access as above
+  \item Network access to the Terraform Registry (\texttt{terraform init} downloads the \texttt{hashicorp/aws}, \texttt{hashicorp/archive}, and \texttt{hashicorp/time} providers automatically, no other local tooling required)
+\end{itemize}
+
+\subsection{Documentation Build (optional)}
+
+Python 3.14+ and \texttt{uv} (for the Sphinx \texttt{docapi} site, see
+\texttt{make docs}).
+
+\section{Setup}
+
+\subsection{Bash}
+
+\begin{lstlisting}
+cd project/bash
+
+# Configure environment variables (optional: SNS email, IP whitelist)
+cp .env.example .env
+nano .env   # SNS_ALERT_EMAIL=..., ALLOWED_IPS=1.2.3.4/32,5.6.7.8/24
+
+# Ensure CLI executable permissions (or: make -C project/bash chmod)
+chmod +x awsctl \
+  lib/* \
+  iam/src/* \
+  cloud-trail/src/* \
+  sns/src/* sns/test/* \
+  event-bridge/src/* event-bridge/test/* \
+  lambda/src/* lambda/test/*
+
+# Verify AWS CLI authentication
+aws sts get-caller-identity
+\end{lstlisting}
+
+\subsection{Terraform}
+
+\begin{lstlisting}
+cd project/terraform
+cp terraform.tfvars.example terraform.tfvars
+nano terraform.tfvars   # sns_alert_email, allowed_ips, etc.
+terraform init
+\end{lstlisting}
+
+See \texttt{project/terraform/README.md} for the full reference.
+
+\subsection{Docker}
+
+Each implementation has its own Dockerfile
+(\texttt{project/bash/Dockerfile}, \texttt{project/terraform/Dockerfile})
+and its own set of Makefile targets, prefixed \texttt{bash-docker-*} and
+\texttt{tr-docker-*} respectively:
+
+\begin{lstlisting}
+make bash-docker  # build + run + open a shell (Bash implementation)
+make tr-docker    # build + run + open a shell (Terraform implementation)
+\end{lstlisting}
+
+% ======================= CHAPTER: USAGE =======================
+\chapter{Usage}
+\label{chap:usage}
+
+\textbf{aws-iam-monitor} ships two independent, equivalent infrastructure
+implementations, pick whichever fits your workflow. Do not run both against
+the same AWS account simultaneously; they use the same default resource
+names and would conflict.
+
+\begin{notebox}[Important]
+See Chapter~\ref{chap:usage} above if you haven't set up prerequisites yet
+(Installation chapter).
+\end{notebox}
+
+\section{Makefile}
+
+The root \texttt{Makefile} delegates Bash- and Terraform-specific commands
+to their own sub-Makefiles (\texttt{project/bash/Makefile},
+\texttt{project/terraform/Makefile}), which remain independently usable via
+\texttt{make -C project/bash <target>} / \texttt{make -C project/terraform
+<target>}. Run \texttt{make help} at any level for the full,
+self-documenting list.
+
+\subsection{Main}
+
+\techtable{
+\texttt{make init} & Init the project (\texttt{uv venv}). \\
+\texttt{make sync} & Sync dependencies (\texttt{uv sync}). \\
+\texttt{make run} & Run the Bash implementation (\texttt{ARGS=...}). \\
+\texttt{make test} & Run the Bash implementation's tests. \\
+\texttt{make clean} & Clean the project. \\
+\texttt{make changelog} & Generate \texttt{CHANGELOG.md}. \\
+\texttt{make version-up} & Bump project version and create a git tag. \\
+\texttt{make gh-issue} & Create a GitHub issue from a template (\texttt{TITLE=... FILE=...}). \\
+}{Target}{Description}
+
+\subsection{Bash Implementation}
+
+\techtable{
+\texttt{make bash-up TARGET=...} & Provision infrastructure (\texttt{TARGET} default: \texttt{all}). \\
+\texttt{make bash-down TARGET=...} & Tear down infrastructure. \\
+\texttt{make bash-status TARGET=...} & Show infrastructure status. \\
+\texttt{make bash-test TARGET=...} & Run the Bash test suite. \\
+}{Target}{Description}
+
+\subsection{Terraform Implementation}
+
+\techtable{
+\texttt{make tf-init} & \texttt{terraform init}. \\
+\texttt{make tf-fmt} & \texttt{terraform fmt}. \\
+\texttt{make tf-validate} & \texttt{terraform validate}. \\
+\texttt{make tf-plan} & \texttt{terraform plan}. \\
+\texttt{make tf-apply} & \texttt{terraform apply}. \\
+\texttt{make tf-destroy} & \texttt{terraform destroy}. \\
+\texttt{make tf-output} & \texttt{terraform output}. \\
+}{Target}{Description}
+
+\subsection{Documentation}
+
+\techtable{
+\texttt{make docs} & Build the Sphinx docs to HTML. \\
+\texttt{make docs-serve} & Serve the built docs locally. \\
+\texttt{make docs-preview} & Build and preview docs (Vercel). \\
+\texttt{make docs-deploy} & Build and deploy docs (Vercel). \\
+}{Target}{Description}
+
+\subsection{Docker}
+
+\techtable{
+\texttt{make bash-docker} & Build + run + open a shell (Bash). \\
+\texttt{make bash-docker-build} & Build the Bash Docker image. \\
+\texttt{make bash-docker-bash} & Open a shell inside the Bash container. \\
+\texttt{make bash-docker-run} & Run \texttt{awsctl} inside the Bash container. \\
+\texttt{make bash-docker-stop} & Stop the running Bash container. \\
+\texttt{make bash-docker-clean} & Remove the Bash Docker image. \\
+\texttt{make tr-docker} & Build + run + open a shell (Terraform). \\
+\texttt{make tr-docker-build} & Build the Terraform Docker image. \\
+\texttt{make tr-docker-bash} & Open a shell inside the Terraform container. \\
+\texttt{make tr-docker-run} & Run \texttt{terraform} inside the Terraform container. \\
+\texttt{make tr-docker-stop} & Stop the running Terraform container. \\
+\texttt{make tr-docker-clean} & Remove the Terraform Docker image. \\
+}{Target}{Description}
+
+\section{Bash -- \texttt{awsctl}}
+
+The primary orchestration tool is \texttt{./awsctl}, run from
+\texttt{project/bash/}. It provides a unified command line interface for
+provisioning, managing, testing, and destroying infrastructure components.
+
+\subsection{Command Syntax}
+
+\begin{lstlisting}
+cd project/bash
+./awsctl <ACTION> [TARGET] [OPTIONS]
+\end{lstlisting}
+
+\subsection{Actions}
+
+\begin{itemize}[leftmargin=1.4em]
+  \item \texttt{--up} : Create/configure resources.
+  \item \texttt{--down} : Tear down/delete resources.
+  \item \texttt{--status} : Check status of resources.
+  \item \texttt{--test} : Execute test suites.
+\end{itemize}
+
+\subsection{Targets}
+
+\begin{itemize}[leftmargin=1.4em]
+  \item \texttt{all} \textit{(default)} : Complete monitoring infrastructure.
+  \item \texttt{iam} : IAM policies, groups, users, and roles.
+  \item \texttt{cloud-trail} : CloudTrail trail and log S3 bucket.
+  \item \texttt{sns} : SNS security alert topic and email subscriptions.
+  \item \texttt{lambda} : Lambda function and audit S3 bucket.
+  \item \texttt{event-bridge} : EventBridge rule and target registration.
+\end{itemize}
+
+\subsection{Options}
+
+\begin{itemize}[leftmargin=1.4em]
+  \item \texttt{-r}, \texttt{--role} : Include optional IAM roles during IAM setup.
+  \item \texttt{-v}, \texttt{--verbose} : Display detailed AWS CLI execution logs.
+  \item \texttt{-h}, \texttt{--help} : Show help message.
+\end{itemize}
+
+\subsection{Deployment Examples}
+
+\begin{lstlisting}
+./awsctl --up all          # Provision the complete monitoring pipeline
+\end{lstlisting}
+
+\textit{This will automatically:}
+
+\begin{enumerate}[leftmargin=1.6em]
+  \item Create customer-managed IAM policies (\texttt{DevPolicy}, \texttt{ProdPolicy}, \texttt{AuditPolicy}), groups (\texttt{DevGroup}, \texttt{ProdGroup}, \texttt{TestGroup}), and users (\texttt{DevAdmin}, \texttt{ProdAdmin}, etc.).
+  \item Provision an S3 log bucket and create a CloudTrail management events trail.
+  \item Provision the SNS alert topic (\texttt{iam-alerts}) and subscribe \texttt{SNS\_ALERT\_EMAIL} if configured in \texttt{.env}.
+  \item Provision an S3 audit history bucket and deploy the monitoring Lambda function with its execution role.
+  \item Create an EventBridge rule for IAM events, attach the Lambda function as a target, and grant invocation permissions.
+\end{enumerate}
+
+\begin{lstlisting}
+./awsctl --up sns          # Provision only the SNS alert component
+./awsctl --status all      # Check status of every component
+./awsctl --test all        # Run automated test suites
+./awsctl --down all        # Tear down the complete infrastructure
+\end{lstlisting}
+
+\begin{notebox}[Note]
+For prerequisites, setup, module structure, and a detailed comparison
+against the Terraform implementation, see \texttt{project/bash/README.md}.
+\end{notebox}
+
+\section{Terraform}
+
+The equivalent declarative implementation lives under
+\texttt{project/terraform/}.
+
+\subsection{Command Syntax}
+
+\begin{lstlisting}
+cd project/terraform
+terraform init
+terraform plan
+terraform apply
+terraform destroy
+\end{lstlisting}
+
+A plain \texttt{terraform apply} with default variables provisions the same
+architecture as \texttt{./awsctl --up all}, including the demo IAM sandbox
+(\texttt{enable\_iam\_sandbox = true} by default). Configuration is entirely
+variable-driven via \texttt{terraform.tfvars} (copy from
+\texttt{terraform.tfvars.example}) -- Terraform does not read the Bash
+implementation's \texttt{.env} file.
+
+\subsection{Deployment Examples}
+
+\begin{lstlisting}
+# First-time provisioning
+cp terraform.tfvars.example terraform.tfvars
+terraform init
+terraform apply
+
+# Updating infrastructure, edit terraform.tfvars, then:
+terraform plan
+terraform apply
+
+# Teardown
+terraform destroy
+\end{lstlisting}
+
+Changing the shared Lambda source
+(\texttt{project/bash/lambda/src/lambda\_function.py}) is detected
+automatically via \texttt{source\_code\_hash} and redeployed on the next
+\texttt{apply}, no manual packaging step.
+
+\begin{notebox}[Note]
+For the full variable reference, state security guidance, and a detailed
+comparison against the Bash implementation, see
+\texttt{project/terraform/README.md}.
+\end{notebox}
+
+% ======================= CHAPTER: SECURITY =======================
+\chapter{Security}
+
+\section{Supported Versions}
+
+The following versions of \textbf{aws-iam-monitor} receive security updates.
+
+\begin{center}
+\renewcommand{\arraystretch}{1.3}
+\begin{tabularx}{0.5\linewidth}{X c}
+\toprule
+\textbf{Version} & \textbf{Supported} \\
+\midrule
+1.x.x & yes \\
+0.x.x & no \\
+\bottomrule
+\end{tabularx}
+\end{center}
+
+\section{Reporting a Vulnerability}
+
+If you discover a security vulnerability in \textbf{aws-iam-monitor}, please
+report it responsibly.
+
+\subsection{How to Report}
+
+Send an email to \textbf{zouariomar20@gmail.com} containing:
+
+\begin{itemize}[leftmargin=1.4em]
+  \item A description of the vulnerability
+  \item Steps to reproduce
+  \item The affected version
+  \item Any relevant logs or screenshots
+  \item A proof of concept (if available)
+\end{itemize}
+
+Please \textbf{do not open a public GitHub issue} for security
+vulnerabilities.
+
+\subsection{Response Process}
+
+We aim to:
+
+\begin{itemize}[leftmargin=1.4em]
+  \item Acknowledge your report within \textbf{48 hours}
+  \item Investigate and validate the issue
+  \item Keep you informed throughout the remediation process
+  \item Release a security fix as quickly as practical
+  \item Credit you for the disclosure (if desired)
+\end{itemize}
+
+\section{Security Practices}
+
+The project follows security best practices for AWS environments.
+
+\subsection{Least Privilege}
+
+\begin{itemize}[leftmargin=1.4em]
+  \item IAM policies grant only the permissions required.
+  \item Cross-account access should use read-only roles whenever possible.
+  \item AWS STS AssumeRole is recommended for organization-wide deployments.
+\end{itemize}
+
+\subsection{IP Whitelisting}
+
+\begin{itemize}[leftmargin=1.4em]
+  \item The system supports automated \texttt{IPWhitelistPolicy} generation to restrict IAM actions to trusted networks.
+  \item Continuous monitoring validates the source IP of every IAM event against a pre-configured \texttt{ALLOWED\_IPS} list.
+  \item Unauthorized access attempts from blocked IPs trigger high-priority alerts and custom CloudWatch metrics.
+\end{itemize}
+
+\subsection{Idempotent, Safe Operations}
+
+\begin{itemize}[leftmargin=1.4em]
+  \item Both implementations check resource state before creating, updating, or deleting it, to avoid duplicate resources and unintended service disruptions.
+  \item The Bash implementation's \texttt{awsctl} and its \texttt{*\_ctl} sub-scripts verify existence/hashes before acting; the Terraform implementation relies on Terraform's own state-diffing (\texttt{terraform plan}) for the same guarantee, a second \texttt{terraform plan} after \texttt{apply} should show no changes.
+\end{itemize}
+
+\subsection{Secure AWS Integrations}
+
+aws-iam-monitor relies on AWS managed services including AWS CloudTrail,
+Amazon EventBridge, AWS Lambda, Amazon SNS, Amazon S3, Amazon CloudWatch, and
+AWS STS. These services should be configured according to AWS security best
+practices.
+
+\subsection{Data Protection}
+
+\begin{itemize}[leftmargin=1.4em]
+  \item Communication with AWS APIs uses HTTPS/TLS.
+  \item Audit reports stored in Amazon S3 should use encryption at rest.
+  \item Sensitive configuration should never be committed to the repository.
+\end{itemize}
+
+\subsection{Secrets Management}
+
+Never commit: AWS Access Keys, Secret Access Keys, Session Tokens,
+\texttt{.env} files, private certificates, or customer data.
+
+Use one of the following instead: IAM Roles, AWS Secrets Manager, AWS
+Systems Manager Parameter Store, or environment variables.
+
+\subsection{Logging}
+
+aws-iam-monitor records IAM activity for auditing purposes. Logs should
+exclude secrets and credentials, be retained according to organizational
+policies, and be monitored for suspicious activity.
+
+\subsection{Dependency Management}
+
+Dependencies should be kept up to date. Recommended tools include
+Dependabot, \texttt{pip-audit}, \texttt{uv}, and GitHub Dependabot Alerts.
+
+\section{Security Contributions}
+
+Contributors can help improve security by following secure coding
+practices, validating all external input, avoiding hard-coded credentials,
+using least-privilege IAM permissions, reviewing dependency updates, and
+testing security-sensitive changes before submitting pull requests.
+
+\section{AWS Security Recommendations}
+
+For production deployments, we recommend:
+
+\begin{itemize}[leftmargin=1.4em]
+  \item Enable AWS CloudTrail in all regions.
+  \item Enable S3 bucket encryption.
+  \item Enable CloudWatch log retention.
+  \item Use SNS encryption where appropriate.
+  \item Enable MFA for privileged AWS accounts.
+  \item Rotate IAM credentials regularly.
+  \item Use dedicated monitoring accounts within AWS Organizations.
+\end{itemize}
+
+\section{Resources}
+
+\begin{itemize}[leftmargin=1.4em]
+  \item AWS Well-Architected Framework -- Security Pillar
+  \item AWS IAM Best Practices
+  \item AWS Security Best Practices
+  \item OWASP Secure Coding Practices Checklist
+  \item CWE Top 25 Most Dangerous Software Weaknesses
+\end{itemize}
+
+% ======================= CHAPTER: RESULTS =======================
+\chapter{Results \& Illustrations}
+
+The following screenshots, captured on the AWS test account used during
+development, illustrate the system's effective behavior once deployed: an
+IAM event is captured by CloudTrail, filtered by the EventBridge rule,
+analyzed and classified by the Lambda function, archived to the audit
+bucket, and -- for high-risk events -- notified via the SNS topic
+\texttt{iam-alerts}.
+
+\section{SNS Subscription Confirmation}
+
+\docfigure{mail/aws-notification-subscription-confirmation.png}{0.62}{Confirmation e-mail received when subscribing to the \texttt{iam-alerts} SNS topic.}
+
+\section{High-Risk Alerts}
+
+\docfigure{mail/hight-risk-aws-iam-security-alert-create-user.png}{0.75}{Alert notification for an event classified as high risk: IAM user creation (\texttt{CreateUser}).}
+
+\docfigure{mail/hight-risk-aws-iam-security-alert-delete-user.png}{0.75}{Alert notification for an event classified as high risk: IAM user deletion (\texttt{DeleteUser}).}
+
+\section{Unauthorized IP Access Detection}
+
+\docfigure{mail/security-alert-unauthorized-ip-access-attempt-detected.png}{0.75}{Alert triggered when an IAM operation originates from a source IP absent from the configured whitelist.}
+
+% ======================= CHAPTER: CHANGELOG =======================
+\chapter{Release Notes}
+
+\section{v1.2.0 -- Current Release}
+
+\begin{itemize}[leftmargin=1.4em]
+  \item \textbf{Features}: Makefile GitHub issue target (\#13); Terraform AWS infrastructure implementation.
+  \item \textbf{Other}: Support for Bash submodule in the root build.
+  \item \textbf{Refactor}: Bash tooling moved into its own subdirectory.
+  \item \textbf{Documentation}: v1.1.0 changelog; updated architecture diagram; Terraform documentation added to \texttt{docapi}; project documentation updates.
+\end{itemize}
+
+\section{v1.1.0}
+
+\begin{itemize}[leftmargin=1.4em]
+  \item \textbf{Features}: Lambda source IP whitelist enforcement; IAM whitelist policy provisioning; improved Docker workflow and Makefile.
+  \item \textbf{Bug Fixes}: Makefile version handling; SNS subscription state handling; CloudTrail S3 status checks region fix.
+  \item \textbf{Refactor}: Modernized Lambda timestamps and security alerts.
+  \item \textbf{Documentation}: Security documentation update.
+\end{itemize}
+
+\section{v1.0.0}
+
+\begin{itemize}[leftmargin=1.4em]
+  \item \textbf{Features}: EventBridge \texttt{IAM CloudTrail} event pattern policy and rule management controller -- first stable release of the complete monitoring pipeline (IAM, CloudTrail, EventBridge, Lambda, SNS, S3, CloudWatch).
+\end{itemize}
+
+\begin{notebox}[Note]
+See \texttt{CHANGELOG.md} at the repository root for the complete,
+auto-generated release history (generated with \texttt{make changelog}).
+\end{notebox}
+
+% ======================= BACK MATTER =======================
+\chapter*{License \& Contact}
+\addcontentsline{toc}{chapter}{License \& Contact}
+\markboth{License \& Contact}{License \& Contact}
+
+\section*{License}
+\addcontentsline{toc}{section}{License}
+
+This project is licensed under the \textbf{Apache-2.0 License}. See the
+\texttt{LICENSE} file at the repository root for details.
+
+\section*{Contact \& Support}
+\addcontentsline{toc}{section}{Contact \& Support}
+
+\begin{itemize}[leftmargin=1.4em]
+  \item \textbf{Author}: ZouariOmar (\url{https://github.com/ZouariOmar})
+  \item \textbf{Email}: \url{zouariomar20@gmail.com}
+  \item \textbf{LinkedIn}: \url{https://www.linkedin.com/in/zouari-omar}
+  \item \textbf{Issues}: \url{https://github.com/ZouariOmar/aws-iam-monitor/issues}
+  \item \textbf{Support}: See \texttt{SUPPORT.md}
+\end{itemize}
+
+\end{document}

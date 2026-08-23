@@ -1,0 +1,651 @@
+\documentclass[11pt,a4paper]{report}
+
+\usepackage[utf8]{inputenc}
+\usepackage[T1]{fontenc}
+\usepackage[french,provide=*]{babel}
+\usepackage[margin=2.5cm]{geometry}
+\usepackage{titlesec}
+\usepackage{enumitem}
+\usepackage{xcolor}
+\usepackage{tcolorbox}
+\tcbuselibrary{skins,breakable}
+\usepackage{fancyhdr}
+\usepackage{tabularx}
+\usepackage{longtable}
+\usepackage{booktabs}
+\usepackage{graphicx}
+\usepackage{hyperref}
+\usepackage{parskip}
+\usepackage{lastpage}
+\usepackage{listings}
+
+\graphicspath{{../img/}}
+
+% ---------- Couleurs ----------
+\definecolor{primaryblue}{RGB}{20,50,90}
+\definecolor{accentorange}{RGB}{214,110,40}
+\definecolor{lightgray}{RGB}{242,242,242}
+\definecolor{textgray}{RGB}{80,80,80}
+\definecolor{codebg}{RGB}{247,247,247}
+
+% ---------- Hyperref ----------
+\hypersetup{
+  colorlinks=true,
+  linkcolor=primaryblue,
+  urlcolor=primaryblue,
+  citecolor=primaryblue,
+  pdftitle={Rapport de stage},
+  pdfsubject={Supervision et audit AWS IAM - aws-iam-monitor},
+  bookmarksnumbered=true,
+}
+
+% ---------- Code listings ----------
+\lstset{
+  basicstyle=\ttfamily\small,
+  backgroundcolor=\color{codebg},
+  frame=single,
+  rulecolor=\color{textgray},
+  breaklines=true,
+  columns=fullflexible,
+  showstringspaces=false,
+}
+
+% ---------- Titres ----------
+\titleformat{\chapter}[display]
+  {\normalfont\bfseries\color{primaryblue}}
+  {\Large\filright\chaptertitlename~\thechapter}
+  {6pt}
+  {\Huge}
+\titlespacing*{\chapter}{0pt}{0pt}{24pt}
+
+\titleformat{\section}
+  {\normalfont\Large\bfseries\color{primaryblue}}
+  {\thesection}{0.6em}{}[{\color{primaryblue}\titlerule[0.8pt]}]
+\titleformat{\subsection}
+  {\normalfont\large\bfseries\color{primaryblue}}
+  {\thesubsection}{0.6em}{}
+\titleformat{\subsubsection}
+  {\normalfont\bfseries\color{textgray}}
+  {\thesubsubsection}{0.6em}{}
+\titlespacing*{\section}{0pt}{16pt}{8pt}
+\titlespacing*{\subsection}{0pt}{12pt}{6pt}
+
+% ---------- En-tête / pied de page ----------
+\pagestyle{fancy}
+\fancyhf{}
+\renewcommand{\headrulewidth}{0.4pt}
+\renewcommand{\footrulewidth}{0.4pt}
+\fancyhead[L]{\small\color{textgray}\nouppercase{\leftmark}}
+\fancyhead[R]{\small\color{textgray} aws-iam-monitor}
+\fancyfoot[C]{\small\color{textgray} Page \thepage\ / \pageref{LastPage}}
+
+\fancypagestyle{plain}{
+  \fancyhf{}
+  \fancyfoot[C]{\small\color{textgray} Page \thepage\ / \pageref{LastPage}}
+  \renewcommand{\headrulewidth}{0pt}
+}
+
+% ---------- Boîtes utilitaires ----------
+\newtcolorbox{keybox}[1]{
+  enhanced, breakable,
+  colback=lightgray, colframe=primaryblue,
+  boxrule=0.5pt, arc=2pt,
+  left=8pt, right=8pt, top=6pt, bottom=6pt,
+  title={#1}, coltitle=white, colbacktitle=primaryblue,
+  fonttitle=\bfseries,
+}
+
+\newcommand{\techtable}[3]{%
+\begin{center}
+\renewcommand{\arraystretch}{1.3}
+\begin{tabularx}{\linewidth}{l X}
+\toprule
+\textbf{#2} & \textbf{#3} \\
+\midrule
+#1
+\bottomrule
+\end{tabularx}
+\end{center}
+}
+
+\newcommand{\reportfigure}[3]{%
+  \begin{figure}[h]
+    \centering
+    \includegraphics[width=#2\linewidth]{#1}
+    \caption{\small #3}
+  \end{figure}
+}
+
+\begin{document}
+\pagenumbering{gobble}
+
+% ======================= PAGE DE GARDE =======================
+\begin{titlepage}
+\centering
+\vspace*{0.2cm}
+
+\includegraphics[width=0.28\linewidth]{aws-iam-monitor-logo.png}\\[0.5cm]
+
+{\large \textbf{ESPRIT}}\\[2pt]
+{\normalsize Cloud et Sécurité}\\[2pt]
+
+\rule{0.85\linewidth}{0.8pt}\\[0.7cm]
+
+{\Large \color{textgray} Rapport de Stage}\\[0.5cm]
+{\Huge \bfseries \color{primaryblue} aws-iam-monitor}\\[0.4cm]
+{\Large \color{primaryblue} Conception et développement d'une plateforme serverless de supervision, d'audit et de détection des menaces liées aux modifications AWS IAM}\\[0.7cm]
+
+\rule{0.85\linewidth}{0.8pt}\\[1cm]
+
+\begin{center}
+\begin{tabularx}{0.82\linewidth}{@{}l X@{}}
+\textbf{Réalisé par :} & Zouari Omar \\[6pt]
+\textbf{Organisme d'accueil :} & Vermeg \\[6pt]
+\textbf{Encadrant professionnel :} & Mr.Amine Chtioui \\[6pt]
+\textbf{Période de stage :} & 1\textsuperscript{er} juillet 2026 -- 31 août 2026 \\[6pt]
+\textbf{Année universitaire :} & 1re année cycle ingénieur \\[6pt]
+\textbf{Dépôt du projet :} & \url{https://github.com/ZouariOmar/aws-iam-monitor} \\
+\end{tabularx}
+\end{center}
+
+\vfill
+
+{\small \color{textgray} Rapport rédigé à l'issue d'un stage consacré à la conception et à l'implémentation d'une architecture de sécurité AWS pour la supervision en temps réel des changements IAM, selon deux approches équivalentes : Bash/AWS CLI et Terraform.}
+
+\end{titlepage}
+
+\pagenumbering{roman}
+
+% ======================= REMERCIEMENTS =======================
+\chapter*{Remerciements}
+\addcontentsline{toc}{chapter}{Remerciements}
+
+Je tiens à exprimer ma sincère gratitude à toutes les personnes qui ont contribué, de près ou de loin, au bon déroulement de ce stage.
+
+Mes remerciements s'adressent en premier lieu à Mr. Amine Chtioui, mon encadrant professionnel, pour son accueil, sa disponibilité et les conseils prodigués tout au long de cette période, ainsi qu'à l'ensemble de l'équipe de Vermeg pour le cadre de travail mis à ma disposition.
+
+Enfin, je remercie ESPRIT et l'ensemble du corps enseignant de la formation Cloud et Sécurité pour les connaissances transmises tout au long de mon parcours, qui m'ont permis d'aborder ce stage dans de bonnes conditions.
+
+% ======================= RESUME =======================
+\chapter*{Résumé}
+\addcontentsline{toc}{chapter}{Résumé}
+
+Ce rapport présente le travail réalisé dans le cadre d'un stage de deux mois portant sur la sécurité des environnements AWS, et plus particulièrement sur la supervision des changements apportés à la gestion des identités et des accès (\textit{IAM -- Identity and Access Management}). Une mauvaise configuration ou une modification malveillante des permissions IAM figure en effet parmi les causes les plus fréquentes d'incidents de sécurité dans le cloud.
+
+Le stage s'est articulé autour du projet \texttt{aws-iam-monitor}, une plateforme serverless permettant de détecter, classer et notifier en temps quasi réel les opérations IAM sensibles effectuées sur un compte AWS. L'architecture retenue s'appuie sur AWS CloudTrail pour la capture des événements, Amazon EventBridge pour leur filtrage, AWS Lambda pour leur analyse et leur classification, puis Amazon SNS, Amazon S3 et Amazon CloudWatch respectivement pour la notification, l'archivage et la supervision.
+
+Le projet a été développé selon deux implémentations indépendantes mais fonctionnellement équivalentes : une implémentation impérative en Bash/AWS CLI, pilotée par un outil en ligne de commande unique (\texttt{awsctl}), et une implémentation déclarative en Terraform, structurée en modules réutilisables. Cette double implémentation a permis de comparer concrètement les approches impérative et déclarative de l'infrastructure as code, chacune présentant des avantages et des limites propres.
+
+Ce stage a été l'occasion d'approfondir des compétences en sécurité cloud, en architecture serverless, en scripting Bash, en infrastructure as code avec Terraform, ainsi qu'en développement Python pour le traitement d'événements. Il a également permis de développer une démarche rigoureuse de conception, de documentation et de validation d'une solution technique complète.
+
+\textbf{Mots-clés :} AWS, IAM, sécurité cloud, CloudTrail, EventBridge, Lambda, SNS, Terraform, Infrastructure as Code, DevSecOps.
+
+\bigskip
+\hrule
+\bigskip
+
+\begin{center}\large\bfseries Abstract\end{center}
+
+This report presents the work carried out during a two-month internship focused on AWS security, specifically on monitoring changes made to Identity and Access Management (IAM). Misconfigured or maliciously altered IAM permissions remain among the most common causes of cloud security incidents.
+
+The internship centered on \texttt{aws-iam-monitor}, a serverless platform designed to detect, classify, and notify sensitive IAM operations performed on an AWS account in near real time. The architecture relies on AWS CloudTrail to capture management events, Amazon EventBridge to filter them, AWS Lambda to analyze and classify them, and Amazon SNS, Amazon S3, and Amazon CloudWatch for alerting, archiving, and observability respectively.
+
+The system was built as two independent, functionally equivalent implementations: an imperative Bash/AWS CLI implementation driven by a single command-line tool (\texttt{awsctl}), and a declarative Terraform implementation organized into reusable modules. This dual implementation made it possible to directly compare imperative and declarative infrastructure-as-code approaches, each with its own strengths and trade-offs.
+
+\textbf{Keywords:} AWS, IAM, cloud security, CloudTrail, EventBridge, Lambda, SNS, Terraform, Infrastructure as Code, DevSecOps.
+
+\newpage
+\tableofcontents
+
+\newpage
+\pagenumbering{arabic}
+
+% ======================= INTRODUCTION GENERALE =======================
+\chapter*{Introduction générale}
+\addcontentsline{toc}{chapter}{Introduction générale}
+\markboth{Introduction générale}{Introduction générale}
+
+Le passage massif des systèmes d'information vers le cloud computing a profondément transformé la manière dont les organisations conçoivent, déploient et sécurisent leurs infrastructures. Ce mouvement, porté par des fournisseurs comme Amazon Web Services (AWS), Microsoft Azure ou Google Cloud Platform, offre une élasticité et une rapidité de déploiement inédites, mais déplace également la surface d'attaque vers de nouveaux points critiques : la configuration des identités et des permissions.
+
+Au sein d'AWS, le service \textit{Identity and Access Management} (IAM) constitue le socle sur lequel repose l'ensemble du contrôle d'accès à un compte. Une politique IAM trop permissive, un utilisateur créé sans autorisation, ou une désactivation de l'authentification multifacteur (MFA) peuvent ouvrir la voie à des compromissions majeures. Contrairement aux vulnérabilités applicatives classiques, ces incidents ne relèvent pas d'une faille de code mais d'une mauvaise gestion des droits, ce qui les rend à la fois plus difficiles à détecter et potentiellement plus dommageables.
+
+C'est dans ce contexte que s'inscrit le stage présenté dans ce rapport, effectué au sein de Vermeg du 1\textsuperscript{er} juillet au 31 août 2026. L'objectif du stage était de concevoir et développer une solution de supervision permettant de détecter en temps quasi réel les modifications sensibles apportées à IAM, de les classer selon leur niveau de risque, et de déclencher les alertes appropriées, tout en conservant une trace exploitable de chaque événement.
+
+La problématique centrale de ce travail peut être formulée ainsi : \textit{comment mettre en place, à moindre coût opérationnel et de façon entièrement automatisée, une supervision continue des changements IAM sur un compte AWS, capable de distinguer une activité légitime d'une activité potentiellement malveillante ?}
+
+Pour y répondre, le projet \texttt{aws-iam-monitor} a été développé selon une architecture serverless événementielle, s'appuyant sur les services AWS CloudTrail, EventBridge, Lambda, SNS, S3 et CloudWatch. Deux implémentations indépendantes et fonctionnellement équivalentes ont été réalisées : l'une impérative, en Bash et AWS CLI, l'autre déclarative, en Terraform, ce qui a permis d'aborder à la fois le scripting d'infrastructure et l'infrastructure as code moderne.
+
+La méthodologie suivie a consisté, dans un premier temps, en une phase d'apprentissage des services AWS impliqués, suivie d'une phase d'analyse du besoin et de conception de l'architecture, puis d'une phase de développement progressif de chaque composant, module par module, pour chacune des deux implémentations. Une dernière phase a été consacrée à la documentation du projet et à la préparation des livrables.
+
+Ce rapport est organisé en cinq chapitres. Le premier chapitre présente le contexte général du stage et l'étude préalable de la problématique de sécurité IAM. Le deuxième chapitre détaille l'étude et la conception de la solution retenue. Le troisième chapitre décrit la réalisation technique du projet, composant par composant. Le quatrième chapitre aborde le déploiement, la validation et les résultats obtenus. Enfin, le cinquième chapitre dresse un bilan des compétences acquises et propose des perspectives d'évolution pour le projet.
+
+% ======================= CHAPITRE 1 =======================
+\chapter{Contexte général et étude préalable}
+
+\section{Présentation de l'environnement du stage}
+
+Le stage s'est déroulé au sein de Vermeg, sur une période de deux mois, du 1\textsuperscript{er} juillet au 31 août 2026. Le travail a porté sur un projet technique concret, \texttt{aws-iam-monitor}, dont le développement constitue le fil conducteur de ce rapport. L'environnement de travail reposait sur un compte AWS de test, l'AWS CLI, un environnement Python 3.11, ainsi que les outils Bash et Terraform utilisés pour les deux implémentations du projet.
+
+\section{Introduction au Cloud Computing et à AWS}
+
+Le cloud computing consiste à mettre à disposition, à la demande et via Internet, des ressources informatiques (calcul, stockage, réseau, services managés) sans que l'utilisateur ait à gérer directement l'infrastructure physique sous-jacente. Amazon Web Services (AWS), l'un des principaux fournisseurs de cloud public, propose un catalogue de plusieurs centaines de services couvrant le calcul (EC2, Lambda), le stockage (S3), les bases de données, le réseau, la sécurité et bien d'autres domaines.
+
+Ce modèle présente des avantages importants — élasticité, paiement à l'usage, réduction du délai de mise en production — mais introduit également un changement de paradigme en matière de sécurité : la responsabilité est partagée entre le fournisseur cloud, qui sécurise l'infrastructure physique, et le client, qui reste responsable de la configuration de ses propres ressources, notamment de la gestion des identités et des accès.
+
+\section{AWS IAM et la problématique de la sécurité des identités}
+
+Le service AWS \textit{Identity and Access Management} (IAM) permet de définir qui peut faire quoi sur un compte AWS. Il repose sur quelques concepts clés :
+
+\begin{itemize}[leftmargin=1.4em]
+  \item les \textbf{utilisateurs} (\textit{users}), qui représentent des identités individuelles ;
+  \item les \textbf{groupes}, qui régroupent des utilisateurs partageant les mêmes permissions ;
+  \item les \textbf{rôles}, qui peuvent être assumés temporairement par des utilisateurs ou des services ;
+  \item les \textbf{politiques} (\textit{policies}), documents JSON décrivant précisément les actions autorisées ou refusées sur quelles ressources.
+\end{itemize}
+
+Le principe de \textbf{moindre privilège} recommande de n'accorder à chaque identité que les permissions strictement nécessaires à l'exercice de sa fonction. En pratique, ce principe est souvent difficile à maintenir dans la durée : les permissions ont tendance à s'accumuler, les politiques trop permissives sont fréquentes, et les changements ne font pas toujours l'objet d'une revue systématique.
+
+\section{Limites et risques d'une mauvaise gestion IAM}
+
+Plusieurs scénarios illustrent les conséquences d'une gestion IAM déficiente ou d'une action malveillante :
+
+\begin{itemize}[leftmargin=1.4em]
+  \item la création d'un utilisateur ou d'une clé d'accès non autorisée, pouvant servir de porte dérobée persistante ;
+  \item l'attachement d'une politique excessive à un utilisateur ou un groupe, conduisant à une escalade de privilèges ;
+  \item la désactivation de l'authentification multifacteur (MFA) sur un compte à privilèges, réduisant la robustesse de l'authentification ;
+  \item la suppression d'une politique de sécurité existante, affaiblissant les contrôles en place.
+\end{itemize}
+
+Ces opérations, prises isolément, sont parfaitement légitimes dans de nombreux contextes d'administration. C'est bien leur combinaison avec un contexte suspect (adresse IP inhabituelle, horaire atypique, absence de justification) qui doit déclencher une vigilance accrue. Cela justifie la nécessité d'un système de supervision continu, capable de capter chaque changement IAM et de le qualifier automatiquement.
+
+\section{Besoin d'une solution de supervision}
+
+Face à ces constats, le besoin identifié est celui d'une solution :
+
+\begin{itemize}[leftmargin=1.4em]
+  \item \textbf{automatisée}, ne nécessitant pas de revue manuelle systématique des journaux ;
+  \item \textbf{en quasi temps réel}, pour permettre une réaction rapide en cas d'anomalie ;
+  \item \textbf{peu coûteuse}, s'appuyant sur des services managés facturés à l'usage plutôt que sur une infrastructure dédiée ;
+  \item \textbf{traçable}, conservant un historique exploitable de chaque événement traité ;
+  \item \textbf{reproductible}, déployable de façon automatisée sur un nouveau compte AWS.
+\end{itemize}
+
+C'est cette analyse qui a conduit à la définition du projet \texttt{aws-iam-monitor}, détaillée dans le chapitre suivant.
+
+% ======================= CHAPITRE 2 =======================
+\chapter{Étude et conception de la solution}
+
+\section{Problématique et objectifs}
+
+La problématique retenue pour le projet peut être reformulée de façon opérationnelle : \textit{comment détecter automatiquement, classer selon leur criticité, et notifier les opérations IAM sensibles effectuées sur un compte AWS, tout en conservant un historique structuré de ces événements ?}
+
+\subsection{Objectifs fonctionnels}
+\begin{itemize}[leftmargin=1.4em]
+  \item détecter en temps quasi réel les opérations IAM sensibles (création d'utilisateur, suppression de politique, création de clé d'accès, désactivation de MFA, attachement de politique) ;
+  \item classer chaque événement selon un niveau de risque (\texttt{CRITICAL}, \texttt{HIGH}, \texttt{MEDIUM}, \texttt{LOW}) ;
+  \item vérifier l'adresse IP source de chaque appel d'API par rapport à une liste blanche configurable ;
+  \item notifier les événements à risque élevé par e-mail via une alerte SNS ;
+  \item archiver chaque événement traité sous forme d'enregistrement JSON structuré ;
+  \item exposer des métriques exploitables pour la supervision.
+\end{itemize}
+
+\subsection{Objectifs techniques}
+\begin{itemize}[leftmargin=1.4em]
+  \item s'appuyer exclusivement sur des services AWS managés, sans serveur à administrer (approche serverless) ;
+  \item garantir l'idempotence du déploiement, qu'il soit rejoué plusieurs fois sans erreur ni duplication ;
+  \item proposer deux implémentations indépendantes et équivalentes (Bash/AWS CLI et Terraform) ;
+  \item documenter précisément l'architecture, l'installation et l'utilisation du projet.
+\end{itemize}
+
+\section{Analyse des besoins et architecture générale}
+
+L'analyse du besoin a conduit à retenir une architecture événementielle en cinq étages, illustrée par le flux suivant :
+
+\begin{center}
+\begin{tcolorbox}[colback=lightgray, colframe=primaryblue, arc=2pt, boxrule=0.5pt]
+\centering
+\textbf{IAM} (opération effectuée) \\
+$\downarrow$ \\
+\textbf{AWS CloudTrail} (capture de l'événement de management) \\
+$\downarrow$ \\
+\textbf{Amazon EventBridge} (filtrage des événements IAM) \\
+$\downarrow$ \\
+\textbf{AWS Lambda} (analyse du payload, classification du risque, vérification IP) \\
+$\downarrow$ \\
+\textbf{Amazon SNS} (alerte) \quad + \quad \textbf{Amazon S3} (archivage) \quad + \quad \textbf{Amazon CloudWatch} (métriques)
+\end{tcolorbox}
+\end{center}
+
+\reportfigure{aws-iam-monitor-architecture-diagram.png}{0.95}{Schéma détaillé de l'architecture serverless du projet \texttt{aws-iam-monitor}, provisionnée à l'identique par les deux implémentations (Bash et Terraform).}
+
+Ce flux se décompose ainsi :
+\begin{enumerate}[leftmargin=1.6em]
+  \item une opération IAM est effectuée sur le compte, qu'elle provienne d'un administrateur, d'un pipeline CI/CD ou d'une clé compromise ;
+  \item AWS CloudTrail enregistre cet appel d'API comme un événement de management, incluant l'identité appelante, l'action, la ressource ciblée et l'adresse IP source ;
+  \item Amazon EventBridge évalue cet événement au regard d'un \textit{event pattern} ciblant la source \texttt{iam.amazonaws.com} et, si l'événement correspond, déclenche la fonction Lambda ;
+  \item la fonction Lambda, écrite en Python 3.11, analyse le payload reçu, vérifie l'adresse IP source par rapport à la liste blanche configurée, et classe l'événement selon son niveau de risque ;
+  \item selon le résultat de cette analyse, la fonction publie une alerte SNS pour les événements à risque élevé, archive systématiquement un enregistrement JSON structuré dans un bucket S3 organisé par date, et émet des métriques personnalisées vers CloudWatch.
+\end{enumerate}
+
+\section{Choix des services AWS}
+
+\techtable{
+AWS IAM & Gestion des politiques, groupes, utilisateurs, rôles et de la politique de liste blanche IP. \\
+AWS CloudTrail & Capture des événements de management (appels d'API) sur l'ensemble du compte. \\
+Amazon EventBridge & Filtrage des événements CloudTrail selon un \textit{event pattern} ciblant IAM et déclenchement de la Lambda. \\
+AWS Lambda (Python 3.11) & Analyse du payload, vérification de l'IP source, classification du risque, archivage, alerte, métriques. \\
+Amazon SNS & Diffusion des alertes de sécurité par e-mail pour les événements à risque élevé. \\
+Amazon S3 & Stockage chiffré (AES-256) et versionné des journaux CloudTrail et des enregistrements d'audit JSON. \\
+Amazon CloudWatch & Journalisation, métriques personnalisées (\texttt{AWSIAMMonitor}) et, côté Terraform, alarmes. \\
+}{Service AWS}{Rôle dans l'architecture}
+
+Le choix d'une architecture entièrement serverless a été motivé par l'absence de charge opérationnelle liée à la gestion de serveurs, par une facturation à l'usage adaptée à un flux d'événements par nature irrégulier, et par la disponibilité native de l'intégration entre CloudTrail, EventBridge et Lambda.
+
+\section{Sécurité de l'architecture}
+
+Plusieurs choix de conception participent à la sécurité globale du système : le chiffrement systématique des buckets S3 (AES-256), le versioning activé sur ces mêmes buckets, l'attribution à la fonction Lambda d'un rôle d'exécution dont les permissions sont scopées aux ressources strictement nécessaires (particulièrement resserrées dans l'implémentation Terraform), ainsi que la vérification de l'adresse IP source de chaque opération IAM par rapport à une politique de liste blanche générée dynamiquement.
+
+\section{Classification des risques}
+
+La fonction Lambda applique une grille de classification à quatre niveaux (\texttt{CRITICAL}, \texttt{HIGH}, \texttt{MEDIUM}, \texttt{LOW}) à chaque opération IAM interceptée. Cette classification tient compte à la fois de la nature de l'action réalisée (par exemple la suppression d'une politique ou la désactivation d'un dispositif MFA constituent des signaux plus critiques que la simple consultation d'une ressource) et du contexte de l'appel, notamment la conformité de l'adresse IP source à la liste blanche configurée.
+
+\section{Stratégie de stockage et stratégie d'alerte}
+
+Chaque événement IAM traité par la Lambda, quel que soit son niveau de risque, est archivé sous la forme d'un enregistrement JSON structuré dans le bucket S3 d'audit, organisé selon une arborescence par date (\texttt{YYYY/MM/DD/}). Cette organisation permet une exploitation ultérieure simple, que ce soit pour une revue manuelle ou pour une éventuelle intégration avec un outil d'analyse externe.
+
+La stratégie d'alerte, quant à elle, est volontairement sélective : seuls les événements dont le niveau de risque est jugé élevé déclenchent une publication sur le topic SNS \texttt{iam-alerts}, évitant ainsi la fatigue d'alerte (\textit{alert fatigue}) qui résulterait d'une notification systématique de chaque opération IAM, y compris les plus anodines.
+
+\section{Infrastructure as Code : une conception à double implémentation}
+
+Un des choix structurants du projet a été de concevoir, dès la phase de design, une architecture pouvant être provisionnée de façon strictement équivalente par deux approches distinctes : une implémentation impérative en Bash/AWS CLI et une implémentation déclarative en Terraform. Ce choix a orienté la conception vers une séparation claire des responsabilités par composant AWS (IAM, CloudTrail, SNS, Lambda, EventBridge), chaque composant correspondant à un module Bash et à un module Terraform distincts, afin de faciliter la comparaison et la maintenance parallèle des deux implémentations.
+
+% ======================= CHAPITRE 3 =======================
+\chapter{Réalisation}
+
+Ce chapitre présente la réalisation technique du projet \texttt{aws-iam-monitor}, organisée par composant. Pour chaque composant, l'implémentation Bash et l'implémentation Terraform sont présentées conjointement, dans la mesure où elles ont été développées en miroir l'une de l'autre.
+
+\section{Structure générale du dépôt}
+
+Le dépôt du projet est organisé de la façon suivante :
+
+\begin{lstlisting}
+aws-iam-monitor/
+|-- Makefile, README.md, ARCHITECTURE.md
+|-- INSTALL.md, USAGE.md, SECURITY.md
+|-- project/
+|   |-- bash/                  Implementation Bash / AWS CLI
+|   |   |-- awsctl             CLI d'orchestration principal
+|   |   |-- lib/               Bibliotheque partagee (common, logger, requirements)
+|   |   |-- iam/                Politiques, groupes, utilisateurs, whitelist IP
+|   |   |-- cloud-trail/         Trail + bucket S3 de logs
+|   |   |-- sns/                Topic d'alerte + abonnement email
+|   |   |-- lambda/              Fonction de supervision + bucket d'audit
+|   |   `-- event-bridge/        Regle + cible Lambda + permission
+|   `-- terraform/              Implementation Terraform (declarative)
+|       |-- main.tf, variables.tf, outputs.tf
+|       |-- providers.tf, versions.tf, locals.tf
+|       `-- modules/            s3, iam, cloudtrail, sns, lambda,
+|                                eventbridge, cloudwatch
+|-- docapi/                    Documentation Sphinx
+`-- res/                       Ressources (logos, schemas)
+\end{lstlisting}
+
+\section{IAM}
+
+Le module IAM constitue la première brique déployée dans les deux implémentations. Il met en place un bac à sable de démonstration composé de politiques gérées (\texttt{DevPolicy}, \texttt{ProdPolicy}, \texttt{AuditPolicy}), de groupes (\texttt{DevGroup}, \texttt{ProdGroup}, \texttt{TestGroup}) et d'utilisateurs de démonstration (\texttt{DevAdmin}, \texttt{ProdAdmin}, etc.). La création de rôles IAM supplémentaires est optionnelle, activée respectivement par l'option \texttt{-r}/\texttt{--role} côté Bash ou par la variable \texttt{enable\_iam\_roles} côté Terraform.
+
+Une politique \texttt{IPWhitelistPolicy} est générée dynamiquement à partir d'une liste d'adresses IP autorisées (\texttt{ALLOWED\_IPS} côté Bash, \texttt{allowed\_ips} côté Terraform), utilisée en aval par la fonction Lambda pour qualifier la provenance de chaque appel d'API.
+
+Côté Terraform, ce module est entièrement autonome, sans dépendance croisée avec les autres modules, ce qui facilite sa maintenance indépendante.
+
+\section{CloudTrail}
+
+Le module CloudTrail provisionne un bucket S3 dédié à la réception des journaux (chiffré en AES-256, versionné) ainsi qu'un \textit{trail} capturant l'ensemble des événements de management du compte, avec un type de lecture/écriture couvrant l'intégralité des événements (\texttt{All}). Côté Terraform, ce module réutilise une instance du module générique \texttt{s3} et lui associe la politique de bucket spécifique à CloudTrail.
+
+\section{EventBridge}
+
+Le module EventBridge définit la règle qui filtre, parmi l'ensemble des événements capturés par CloudTrail, ceux dont la source est \texttt{iam.amazonaws.com}. Cette règle cible la fonction Lambda de supervision et s'accompagne de l'attribution de la permission d'invocation nécessaire pour qu'EventBridge puisse déclencher la fonction. Le filtrage fin des actions réellement surveillées (liste des opérations sensibles) est délégué à la logique applicative interne de la Lambda plutôt qu'à l'\textit{event pattern} lui-même, afin de conserver une règle de filtrage simple et une logique métier centralisée et facilement évolutive.
+
+\section{Lambda}
+
+La fonction Lambda, écrite en Python 3.11, constitue le cœur analytique du système. Son traitement se décompose en plusieurs étapes :
+
+\begin{enumerate}[leftmargin=1.6em]
+  \item réception et analyse du payload de l'événement transmis par EventBridge ;
+  \item extraction des champs pertinents : identité appelante, action réalisée, ressource ciblée, adresse IP source ;
+  \item vérification de la conformité de l'adresse IP source par rapport à la politique de liste blanche ;
+  \item classification du niveau de risque de l'opération (\texttt{CRITICAL}, \texttt{HIGH}, \texttt{MEDIUM}, \texttt{LOW}) ;
+  \item archivage systématique d'un enregistrement JSON structuré dans le bucket S3 d'audit, organisé par date ;
+  \item publication d'une alerte SNS pour les événements classés à risque élevé ;
+  \item émission de métriques personnalisées vers CloudWatch, sous le namespace \texttt{AWSIAMMonitor}.
+\end{enumerate}
+
+Le code source de la fonction est partagé entre les deux implémentations (\path{project/bash/lambda/src/lambda_function.py}), ce qui garantit une logique de détection strictement identique quelle que soit l'implémentation utilisée pour provisionner l'infrastructure. Côté Terraform, le déploiement du code est automatisé via l'attribut \texttt{source\_code\_hash}, qui détecte toute modification du fichier source et déclenche un redéploiement sans étape de packaging manuelle ; côté Bash, cette étape est réalisée par une comparaison manuelle de hachage SHA-256 avant mise à jour.
+
+\section{SNS}
+
+Le module SNS provisionne le topic d'alerte de sécurité \texttt{iam-alerts}, sa politique d'accès, ainsi qu'un abonnement e-mail optionnel, configuré via la variable \texttt{SNS\_ALERT\_EMAIL} (fichier \texttt{.env}) côté Bash, ou via la variable Terraform \texttt{sns\_alert\_email}.
+
+\section{S3}
+
+Deux buckets S3 distincts sont utilisés par le système : un bucket recevant les journaux bruts de CloudTrail, et un bucket dédié à l'historique d'audit alimenté par la fonction Lambda. Les deux sont chiffrés (algorithme configurable, \texttt{AES256} par défaut) et versionnés. Côté Terraform, un module \texttt{s3} générique et réutilisable a été développé, ne portant aucune politique de bucket propre — celle-ci étant définie par le module appelant (\texttt{cloudtrail} ou \texttt{lambda}) — et complété par un blocage explicite de l'accès public sur les deux buckets, amélioration propre à l'implémentation Terraform par rapport à l'implémentation Bash.
+
+\section{CloudWatch}
+
+Le module CloudWatch gère le groupe de logs de la fonction Lambda (durée de rétention configurable, 30 jours par défaut) ainsi que les métriques personnalisées émises par la Lambda. L'implémentation Terraform ajoute une fonctionnalité absente de l'implémentation Bash : des alarmes optionnelles (activées par défaut via la variable \texttt{enable\_cloudwatch\_alarms}) portant sur les accès depuis une IP non autorisée (\texttt{UnauthorizedIPAccess}) et sur les erreurs de la fonction Lambda, ces alarmes publiant elles-mêmes vers le topic SNS existant.
+
+\section{Bash / AWS CLI -- l'outil awsctl}
+
+L'implémentation Bash est pilotée par un unique script d'orchestration, \texttt{awsctl}, dont la syntaxe générale est :
+
+\begin{lstlisting}
+./awsctl <ACTION> [TARGET] [OPTIONS]
+\end{lstlisting}
+
+Les actions disponibles sont \texttt{--up} (création), \texttt{--down} (destruction), \texttt{--status} (état) et \texttt{--test} (exécution des suites de test). Les cibles possibles correspondent à chaque composant (\texttt{all}, \texttt{iam}, \texttt{cloud-trail}, \texttt{sns}, \texttt{lambda}, \texttt{event-bridge}), ce qui permet de piloter l'infrastructure globalement ou composant par composant. Les options \texttt{-r}/\texttt{--role} et \texttt{-v}/\texttt{--verbose} complètent cette interface.
+
+L'ensemble des scripts s'appuie sur une bibliothèque commune (\texttt{lib/}), regroupant les fonctions partagées, la journalisation et la vérification des prérequis, ce qui limite la duplication de code entre les modules. Un soin particulier a été apporté à l'\textbf{idempotence} des scripts : chaque opération de création vérifie préalablement l'existence de la ressource visée, afin qu'un déploiement rejoué plusieurs fois ne produise ni erreur ni doublon.
+
+Le déploiement complet suit un ordre explicite en cinq étapes : IAM, puis CloudTrail, puis SNS, puis Lambda, puis EventBridge — la teardown appliquant l'ordre inverse. Cet enchaînement gère notamment la propagation IAM parfois différée d'AWS lors de la création de la fonction Lambda, au moyen d'une boucle de nouvelles tentatives avec temporisation.
+
+\section{Terraform}
+
+L'implémentation Terraform reproduit la même architecture de façon déclarative, organisée en sept modules réutilisables : \texttt{s3}, \texttt{cloudtrail}, \texttt{iam}, \texttt{sns}, \texttt{cloudwatch}, \texttt{lambda} et \texttt{eventbridge}. Le fichier racine \texttt{main.tf} assure le câblage entre ces modules, dont l'ordre de résolution est déterminé automatiquement par le graphe de dépendances Terraform, sans qu'il soit nécessaire de l'expliciter comme en Bash.
+
+L'ensemble de la configuration est piloté par variables (\texttt{variables.tf}, valeurs par défaut alignées sur celles du fichier \texttt{.env.example} de l'implémentation Bash), ce qui garantit qu'un simple \texttt{terraform apply} sans surcharge produit une architecture équivalente à \texttt{./awsctl --up all}. Terraform ne lit pas le fichier \texttt{.env} de l'implémentation Bash : la configuration se fait exclusivement via \texttt{terraform.tfvars}.
+
+\section{Comparaison Bash / Terraform}
+
+Bien que fonctionnellement équivalentes, les deux implémentations présentent des différences techniques volontaires, résumées dans le tableau suivant.
+
+\begin{center}
+\renewcommand{\arraystretch}{1.35}
+{\small
+\begin{tabularx}{\linewidth}{X X X}
+\toprule
+\textbf{Aspect} & \textbf{Bash / AWS CLI} & \textbf{Terraform} \\
+\midrule
+Approche & Impérative (séquence explicite de commandes) & Déclarative (état cible décrit, ordre résolu automatiquement) \\
+Gestion des permissions Lambda & Portée large (\texttt{S3AuditHistory}, \texttt{Resource: "*"} pour SNS) & Portée strictement limitée aux ressources exactes (moindre privilège renforcé) \\
+Accès public S3 & Non explicitement bloqué & Bloqué explicitement sur les deux buckets \\
+Attente de propagation IAM & Boucle de 6 tentatives avec délai de 10s & Temporisation déterministe unique (\texttt{time\_sleep}, 10s) \\
+Déploiement du code Lambda & Comparaison manuelle de hachage SHA-256 & Automatique via \texttt{source\_code\_hash} \\
+Alarmes CloudWatch & Absentes (métriques émises mais non exploitées) & Optionnelles, activées par défaut \\
+Reproductibilité & Élevée mais dépendante de l'ordre d'exécution des scripts & Élevée et garantie par le graphe de dépendances \\
+Maintenance & Simple pour de petites évolutions ciblées & Facilitée par la modularité et l'état déclaratif pour des évolutions complexes \\
+\bottomrule
+\end{tabularx}
+}
+\end{center}
+
+En dehors de ces différences assumées, le nommage des ressources, le contenu de l'\textit{event pattern} EventBridge, les documents de politique IAM (\texttt{DevPolicy}, \texttt{ProdPolicy}, \texttt{AuditPolicy}, \texttt{IPWhitelistPolicy}) et la politique du topic SNS restent strictement identiques entre les deux implémentations.
+
+\section{Tests et validation}
+
+La validation du projet s'est appuyée sur les mécanismes fournis par le dépôt lui-même : la commande \texttt{./awsctl --test all} exécute la suite de tests associée à l'implémentation Bash, tandis que \texttt{terraform validate} et \texttt{terraform plan} permettent de vérifier la cohérence de la configuration Terraform avant tout déploiement réel. Le cycle complet de provisionnement (\texttt{--up all} / \texttt{terraform apply}), de vérification (\texttt{--status all} / consultation des \textit{outputs} Terraform) et de désinstallation (\texttt{--down all} / \texttt{terraform destroy}) a été exécuté de bout en bout sur les deux implémentations.
+
+% ======================= CHAPITRE 4 =======================
+\chapter{Déploiement, validation et résultats}
+
+\section{Prérequis}
+
+Le déploiement du projet, quelle que soit l'implémentation choisie, nécessite un compte AWS actif, des identifiants disposant des permissions nécessaires à la création des ressources IAM, CloudTrail, Lambda, EventBridge, SNS, S3 et CloudWatch, ainsi qu'AWS CLI configuré (résolution standard des identifiants : variables d'environnement, fichier de configuration partagé, profil SSO, ou rôle attaché). L'implémentation Terraform nécessite en outre l'installation de Terraform, tandis que l'implémentation Bash nécessite un environnement Unix disposant de Bash et des utilitaires standards.
+
+\section{Installation et provisioning}
+
+\subsection{Implémentation Bash}
+\begin{lstlisting}
+git clone https://github.com/ZouariOmar/aws-iam-monitor.git
+cd aws-iam-monitor
+cp project/bash/.env.example project/bash/.env
+# Renseigner SNS_ALERT_EMAIL et ALLOWED_IPS si necessaire
+make bash-up
+\end{lstlisting}
+
+\subsection{Implémentation Terraform}
+\begin{lstlisting}
+git clone https://github.com/ZouariOmar/aws-iam-monitor.git
+cd aws-iam-monitor
+cp project/terraform/terraform.tfvars.example project/terraform/terraform.tfvars
+make tf-init
+make tf-apply
+\end{lstlisting}
+
+\textit{Avertissement :} les deux implémentations utilisant par défaut les mêmes noms de ressources, elles ne doivent pas être déployées simultanément sur le même compte AWS, sous peine de conflit de nommage.
+
+\section{Déroulement d'un déploiement complet}
+
+Un déploiement complet (\texttt{./awsctl --up all} ou \texttt{terraform apply} avec les valeurs par défaut) provisionne, dans l'ordre : les politiques, groupes et utilisateurs IAM de démonstration ; le bucket de logs et le trail CloudTrail ; le topic SNS et son éventuel abonnement e-mail ; le bucket d'audit et la fonction Lambda avec son rôle d'exécution ; puis la règle EventBridge et sa cible. Côté Terraform, ce même résultat est obtenu sans que l'ordre soit explicité par l'opérateur, celui-ci étant déduit du graphe de dépendances entre modules.
+
+\section{Fonctionnement observé}
+
+Une fois déployé, le système traite chaque opération IAM effectuée sur le compte de la façon suivante : l'événement est capturé par CloudTrail, filtré par la règle EventBridge, puis transmis à la fonction Lambda qui l'analyse, le classe, l'archive dans le bucket d'audit sous forme de fichier JSON horodaté, et déclenche le cas échéant une alerte SNS ainsi que l'émission d'une métrique CloudWatch. Ce traitement s'effectue en l'espace de quelques secondes après l'opération IAM initiale, conformément à l'objectif de détection en temps quasi réel fixé en début de projet.
+
+\subsection{Illustrations}
+
+Les captures d'écran suivantes, réalisées sur le compte AWS de test, illustrent le fonctionnement effectif du système une fois déployé.
+
+\reportfigure{mail/aws-notification-subscription-confirmation.png}{0.6}{Confirmation d'abonnement au topic SNS \texttt{iam-alerts} reçue par e-mail lors de la configuration du canal de notification.}
+
+\reportfigure{mail/hight-risk-aws-iam-security-alert-create-user.png}{0.72}{Alerte SNS reçue pour un événement classé à risque élevé : création d'un utilisateur IAM (\texttt{CreateUser}).}
+
+\reportfigure{mail/hight-risk-aws-iam-security-alert-delete-user.png}{0.72}{Alerte SNS reçue pour un événement classé à risque élevé : suppression d'un utilisateur IAM (\texttt{DeleteUser}).}
+
+\reportfigure{mail/security-alert-unauthorized-ip-access-attempt-detected.png}{0.72}{Alerte SNS déclenchée à la suite d'une opération IAM provenant d'une adresse IP absente de la liste blanche configurée.}
+
+\section{Avantages de l'approche idempotente}
+
+L'idempotence recherchée dans les deux implémentations présente un intérêt opérationnel concret : un même script ou une même configuration peut être exécuté à plusieurs reprises sans provoquer d'erreur ni de duplication de ressources, ce qui facilite les itérations de développement, les corrections successives et la reproductibilité du déploiement sur un nouveau compte AWS.
+
+\section{Limites de la validation effectuée}
+
+La validation réalisée durant le stage a porté sur le fonctionnement correct du cycle de déploiement, de vérification et de désinstallation des deux implémentations, ainsi que sur la cohérence de l'architecture obtenue par rapport à la conception initiale. Elle ne constitue toutefois pas une campagne de test de charge ni un audit de sécurité formel ; ces aspects relèvent des perspectives évoquées au chapitre suivant.
+
+% ======================= CHAPITRE 5 =======================
+\chapter{Bilan et perspectives}
+
+\section{Compétences techniques acquises}
+
+Ce stage a permis de développer un ensemble de compétences techniques concrètes, structurées autour de plusieurs axes.
+
+\subsection{Compétences en Cloud AWS et sécurité}
+La manipulation quotidienne des services IAM, CloudTrail, EventBridge, Lambda, SNS, S3 et CloudWatch a permis d'acquérir une compréhension pratique, et non plus seulement théorique, de la manière dont ces services interagissent pour construire une architecture de sécurité serverless cohérente. La réflexion menée sur la classification des risques et la logique de liste blanche IP a par ailleurs sensibilisé à la démarche d'analyse de risque propre à la sécurité des identités.
+
+\subsection{Compétences DevOps et Infrastructure as Code}
+Le développement en parallèle d'une implémentation impérative (Bash) et d'une implémentation déclarative (Terraform) a permis de comparer concrètement ces deux paradigmes d'automatisation d'infrastructure, chacun avec ses forces (simplicité et contrôle fin pour Bash, robustesse et déclarativité pour Terraform).
+
+\subsection{Compétences en développement}
+Le développement de la fonction Lambda en Python a mobilisé des compétences de traitement de données structurées (JSON), de logique conditionnelle de classification, et d'intégration avec plusieurs services AWS via leurs SDK respectifs. Le scripting Bash a quant à lui renforcé la rigueur nécessaire à l'écriture de scripts idempotents et modulaires.
+
+\subsection{Documentation et autonomie}
+La rédaction de la documentation technique du projet (architecture, installation, usage) a constitué un exercice à part entière, nécessitant de formaliser clairement des choix techniques pour un lecteur qui n'a pas participé à leur élaboration. Le stage a par ailleurs été mené avec un degré d'autonomie important dans la planification du travail au sein du cadre fixé.
+
+\section{Difficultés rencontrées}
+
+Certaines difficultés inhérentes à ce type de projet peuvent être identifiées à partir de l'architecture elle-même, sans qu'il soit possible d'en attribuer précisément la résolution à un événement daté faute de trace exhaustive de chaque incident : la propagation parfois différée des permissions IAM lors de la création d'une fonction Lambda a nécessité la mise en place de mécanismes d'attente (boucle de nouvelles tentatives côté Bash, temporisation déterministe côté Terraform) ; la nécessité de maintenir une stricte équivalence fonctionnelle entre deux implémentations développées en parallèle a également demandé une vigilance constante afin d'éviter toute divergence non intentionnelle.
+
+\section{Limites actuelles du projet}
+
+Le projet, dans son état actuel, présente certaines limites assumées : la classification des risques repose sur une logique embarquée dans le code de la Lambda plutôt que sur un moteur de règles configurable ; le système ne couvre que les événements de management IAM capturés par CloudTrail, à l'exclusion d'autres sources de télémétrie de sécurité ; et l'état Terraform, en configuration par défaut, repose sur un backend local peu adapté à un usage en équipe.
+
+\section{Perspectives d'évolution}
+
+Plusieurs pistes d'amélioration se dégagent naturellement de ce travail, à titre de perspectives futures et non de fonctionnalités déjà réalisées :
+
+\begin{itemize}[leftmargin=1.4em]
+  \item enrichissement de la logique de classification des risques, par exemple via un moteur de règles externalisé et configurable sans modification du code de la Lambda ;
+  \item extension de la couverture événementielle au-delà des seules opérations IAM, vers d'autres services sensibles ;
+  \item intégration avec des outils de sécurité tiers (SIEM, plateformes de gestion des incidents) pour centraliser les alertes ;
+  \item mise en place de tableaux de bord CloudWatch plus avancés, exploitant plus largement les métriques \texttt{AWSIAMMonitor} déjà émises ;
+  \item prise en charge du support multi-comptes via AWS Organizations, afin de superviser plusieurs comptes AWS depuis un point central ;
+  \item automatisation de réponses à certains incidents (par exemple désactivation automatique d'une clé d'accès jugée compromise), avec les précautions nécessaires pour éviter les faux positifs ;
+  \item mise en place d'un backend Terraform distant (S3 + verrouillage DynamoDB) pour sécuriser l'état en configuration d'équipe.
+\end{itemize}
+
+% ======================= CONCLUSION GENERALE =======================
+\chapter*{Conclusion générale}
+\addcontentsline{toc}{chapter}{Conclusion générale}
+\markboth{Conclusion générale}{Conclusion générale}
+
+Ce stage de deux mois a permis de mener à bien un projet complet de sécurité cloud, depuis l'apprentissage initial des services AWS impliqués jusqu'à la livraison d'une plateforme de supervision IAM fonctionnelle, documentée et déployable de deux façons équivalentes.
+
+La première semaine, consacrée à la découverte d'AWS IAM, CloudTrail, EventBridge, Lambda, SNS, S3 et CloudWatch, a posé les bases nécessaires à la conception d'une architecture serverless événementielle cohérente. La phase de développement, qui a occupé l'essentiel du stage, a permis de construire progressivement chaque composant de cette architecture, d'abord dans une implémentation Bash/AWS CLI orchestrée par l'outil \texttt{awsctl}, puis dans une implémentation Terraform déclarative et modulaire, strictement équivalente sur le plan fonctionnel. Cette double implémentation a constitué l'un des apports pédagogiques les plus riches du stage, en permettant une comparaison directe et concrète entre deux approches d'automatisation d'infrastructure.
+
+Sur le plan des compétences, ce stage a renforcé une compréhension opérationnelle de la sécurité des identités dans le cloud, une maîtrise pratique du scripting Bash et du développement Python appliqué au traitement d'événements, ainsi qu'une première expérience approfondie de l'infrastructure as code avec Terraform. La nécessité de documenter précisément chaque choix technique a par ailleurs développé une rigueur de communication technique indispensable à tout projet destiné à être repris ou audité par des tiers.
+
+Au-delà du résultat technique obtenu, ce travail illustre une démarche de sécurité proactive : plutôt que de constater a posteriori les conséquences d'une mauvaise configuration IAM, le projet \texttt{aws-iam-monitor} propose un mécanisme de détection continue, capable d'alerter rapidement sur les changements les plus sensibles. Les perspectives identifiées, qu'il s'agisse de l'enrichissement de la classification des risques, du support multi-comptes ou de l'intégration avec des outils de sécurité tiers, dessinent des axes de travail réalistes pour la poursuite de ce projet au-delà du cadre du stage.
+
+% ======================= POINTS CLES SOUTENANCE =======================
+\chapter*{Points clés pour la soutenance}
+\addcontentsline{toc}{chapter}{Points clés pour la soutenance}
+\markboth{Points clés pour la soutenance}{Points clés pour la soutenance}
+
+\begin{keybox}{Problématique}
+Comment détecter, classer et notifier automatiquement les modifications sensibles apportées à AWS IAM sur un compte, en temps quasi réel et à moindre coût opérationnel ?
+\end{keybox}
+
+\begin{keybox}{Solution}
+\texttt{aws-iam-monitor} : plateforme serverless événementielle, développée en deux implémentations équivalentes (Bash/AWS CLI et Terraform).
+\end{keybox}
+
+\begin{keybox}{Architecture}
+IAM $\rightarrow$ CloudTrail $\rightarrow$ EventBridge $\rightarrow$ Lambda (analyse, classification, whitelist IP) $\rightarrow$ SNS + S3 + CloudWatch.
+\end{keybox}
+
+\begin{keybox}{Services AWS mobilisés}
+IAM, CloudTrail, EventBridge, Lambda (Python 3.11), SNS, S3, CloudWatch.
+\end{keybox}
+
+\begin{keybox}{Démonstration possible}
+Déclenchement d'une opération IAM sensible (ex. \texttt{CreateAccessKey}) $\rightarrow$ observation de l'archive JSON dans S3, de l'alerte SNS et de la métrique CloudWatch correspondantes.
+\end{keybox}
+
+\begin{keybox}{Choix techniques marquants}
+Idempotence des scripts Bash ; modularité et graphe de dépendances Terraform ; code Lambda partagé entre les deux implémentations via \texttt{source\_code\_hash}.
+\end{keybox}
+
+\begin{keybox}{Sécurité}
+Chiffrement et versioning S3, blocage de l'accès public (Terraform), permissions Lambda scopées au strict nécessaire, liste blanche IP générée dynamiquement.
+\end{keybox}
+
+\begin{keybox}{Bash vs Terraform}
+Deux implémentations indépendantes, fonctionnellement équivalentes, avec des divergences assumées et documentées (permissions, alarmes CloudWatch, gestion du déploiement du code).
+\end{keybox}
+
+\begin{keybox}{Difficultés}
+Propagation IAM différée lors de la création de la Lambda ; maintien de la stricte équivalence entre les deux implémentations développées en parallèle.
+\end{keybox}
+
+\begin{keybox}{Résultats}
+Cycle complet de provisionnement, vérification et désinstallation validé sur les deux implémentations ; documentation technique complète du projet.
+\end{keybox}
+
+\begin{keybox}{Limites}
+Classification des risques embarquée dans le code plutôt que configurable ; périmètre limité aux événements IAM ; backend Terraform local par défaut.
+\end{keybox}
+
+\begin{keybox}{Perspectives}
+Moteur de classification configurable, support multi-comptes AWS Organizations, intégration SIEM, tableaux de bord avancés, backend Terraform distant.
+\end{keybox}
+
+\end{document}
