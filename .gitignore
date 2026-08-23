@@ -29,3 +29,9 @@ override.tf*
 # Note: .terraform.lock.hcl (provider version lock file) is intentionally NOT
 # ignored here — it must be committed for reproducible `terraform init` across
 # machines/CI. It isn't matched by the `*.lock` rule above (different extension).
+
+### LATEX ###
+*.aux
+*.log
+*.toc
+*.out

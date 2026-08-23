@@ -19,6 +19,9 @@ TF_DOCKERFILE       ?= $(TERRAFORM_DIR)/Dockerfile## Terraform Dockerfile
 GITHUB_ISSUES_DIR   ?= .github/issues## Github issues directory
 TARGET              ?= all## awsctl target, passed through to the Bash sub-Makefile (iam, cloud-trail, sns, lambda, event-bridge, all)
 ARGS                ?=## Extra flags, passed through to the Bash/Terraform sub-Makefiles (e.g. ARGS=--verbose or ARGS="-var-file=other.tfvars")
+LATEX_DIR           ?= res/latex## Latex files directory
+PDF_DIR             ?= res/pdf## Pdf files directory
+PDFLATEX            ?= pdflatex## Latex-to-pdf generator tool
 
 # Commands
 RUN_CMD           ?= cd $(BASH_DIR) && ./awsctl                                    ## Run command
@@ -291,6 +294,34 @@ docs-preview: docs-html ## Deploy the project documentation (preview mode)
 docs-serve: ## Serve the documentation
 	@$(call print_title,Serve Documentation...)
 	@$(DOCS_SERVE_CMD)
+
+.PHONY: docs-latex
+docs-latex: ## Generate PDF_DIR/*.pdf from LATEX_DIR/*.tex (FILE=filename for one file)
+	@tmp=$$(mktemp -d); \
+	out=$$(realpath "$(PDF_DIR)"); \
+	trap 'rm -rf "$$tmp"' EXIT; \
+	mkdir -p "$$out"; \
+	cd "$(LATEX_DIR)" || exit 1; \
+	if [ -n "$(FILE)" ]; then \
+		if [ ! -f "$(FILE).tex" ]; then \
+			echo "Error: $(FILE).tex not found"; \
+			exit 1; \
+		fi; \
+		$(PDFLATEX) -interaction=nonstopmode -halt-on-error \
+			-output-directory="$$tmp" "$(FILE).tex" && \
+		$(PDFLATEX) -interaction=nonstopmode -halt-on-error \
+			-output-directory="$$tmp" "$(FILE).tex" && \
+		mv "$$tmp/$(FILE).pdf" "$$out/"; \
+	else \
+		for file in *.tex; do \
+			name=$$(basename "$$file" .tex); \
+			$(PDFLATEX) -interaction=nonstopmode -halt-on-error \
+				-output-directory="$$tmp" "$$file" && \
+			$(PDFLATEX) -interaction=nonstopmode -halt-on-error \
+				-output-directory="$$tmp" "$$file" && \
+			mv "$$tmp/$$name.pdf" "$$out/" || exit 1; \
+		done; \
+	fi
 
 docs-%: ## Document the project
 	@$(call print_title,$* $(PROJECT_NAME) docsapi...)
