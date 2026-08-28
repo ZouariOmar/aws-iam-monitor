@@ -33,3 +33,10 @@ Response & Output Handling
 1. **S3 Historical Audit Logs**: Every processed event is formatted as a structured JSON object and archived in Amazon S3 under ``iam-audit/YYYY/MM/DD/``.
 2. **Real-time SNS Alerts**: High and Critical events trigger immediate security notifications published to Amazon SNS, delivering email notifications to security personnel.
 3. **CloudWatch Metrics**: Emits custom metrics under the ``AWSIAMMonitor`` namespace with dimensions for ``Action`` and ``Risk``.
+
+Operating Cost
+--------------
+
+The pipeline is fully serverless and pay-per-use. A moderate workload
+(~50,000 IAM events per month) costs **≈ $4 / month** at standard on-demand
+rates, dominated by Amazon CloudWatch. See :doc:`cost` for the full breakdown.
