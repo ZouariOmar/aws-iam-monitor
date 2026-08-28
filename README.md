@@ -39,6 +39,8 @@
 
 By capturing management events from **AWS CloudTrail**, filtering events with **Amazon EventBridge**, and processing security payloads with **AWS Lambda**, the system detects unauthorized modifications, privilege escalation risks, new credential creation, and policy tampering within seconds. High-risk events immediately trigger **Amazon SNS** notifications (with optional automated email subscriptions) while maintaining structured audit logs in **Amazon S3** and custom performance metrics in **Amazon CloudWatch**.
 
+The entire pipeline is serverless and pay-per-use: a moderate workload (~50,000 IAM events/month) costs **≈ $4/month at standard on-demand rates**, dominated by CloudWatch metrics. See [ARCHITECTURE.md](ARCHITECTURE.md#cost-estimate) for the full breakdown.
+
 <div align="center">
 <img src="res/img/aws-iam-monitor-architecture-diagram.png" alt="aws-iam-monitor-architecture-diagram">
 </div>
@@ -53,12 +55,13 @@ By capturing management events from **AWS CloudTrail**, filtering events with **
 - **CloudWatch Metrics**: Emits custom `AWSIAMMonitor` metrics for CloudWatch dashboards and alarm creation.
 - **Idempotent Infrastructure**: Both the Bash CLI (`awsctl`) and the Terraform implementation create, update, and delete resources safely without duplication.
 - **Two Equivalent Implementations**: An imperative Bash/AWS-CLI CLI and a declarative Terraform implementation, pick whichever fits your workflow.
+- **Low, Predictable Cost**: Fully serverless and pay-per-use, ≈ $4/month at standard on-demand rates for a moderate workload (see [ARCHITECTURE.md](ARCHITECTURE.md#cost-estimate)).
 
 ## Documentation
 
 | Document                                             | Covers                                                                        |
 | :--------------------------------------------------- | :---------------------------------------------------------------------------- |
-| [ARCHITECTURE.md](ARCHITECTURE.md)                   | Architecture diagram, AWS services table, deployment ordering                 |
+| [ARCHITECTURE.md](ARCHITECTURE.md)                   | Architecture diagram, AWS services table, deployment ordering, cost estimate  |
 | [INSTALL.md](INSTALL.md)                             | Prerequisites, requirements, and setup for both implementations               |
 | [USAGE.md](USAGE.md)                                 | Full Bash (`awsctl`) and Terraform CLI/command reference, deployment examples |
 | [SECURITY.md](SECURITY.md)                           | Security policy, vulnerability reporting, security best practices             |

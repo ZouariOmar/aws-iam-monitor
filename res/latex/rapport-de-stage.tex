@@ -124,10 +124,18 @@
 \centering
 \vspace*{0.2cm}
 
+\noindent
+\begin{minipage}[c]{0.48\linewidth}
+  \raggedright\includegraphics[height=1cm]{other/esprit-logo-without-bg.png}
+\end{minipage}\hfill
+\begin{minipage}[c]{0.48\linewidth}
+  \raggedleft\includegraphics[height=1cm]{other/vermeg-logo-without-bg.png}
+\end{minipage}\\[1cm]
+
 \includegraphics[width=0.28\linewidth]{aws-iam-monitor-logo.png}\\[0.5cm]
 
-{\large \textbf{ESPRIT}}\\[2pt]
-{\normalsize Cloud et Sécurité}\\[2pt]
+{\normalsize \color{textgray} École Supérieure Privée d'Ingénierie et de Technologies (ESPRIT) --- Cloud et Sécurité}\\[2pt]
+{\normalsize \color{textgray} Stage réalisé au sein de Vermeg}\\[2pt]
 
 \rule{0.85\linewidth}{0.8pt}\\[0.7cm]
 
@@ -533,6 +541,46 @@ Les captures d'écran suivantes, réalisées sur le compte AWS de test, illustre
 
 \reportfigure{mail/security-alert-unauthorized-ip-access-attempt-detected.png}{0.72}{Alerte SNS déclenchée à la suite d'une opération IAM provenant d'une adresse IP absente de la liste blanche configurée.}
 
+\section{Estimation des coûts d'exploitation}
+
+L'architecture étant intégralement serverless et facturée à l'usage, son coût
+d'exploitation reste très faible. L'estimation ci-dessous a été réalisée avec
+l'AWS Pricing Calculator (\texttt{calculator.aws}), pour la région US East
+(Virginie du Nord), aux tarifs à la demande standards et \emph{sans} appliquer
+l'offre gratuite AWS, sur une base d'environ 50\,000 événements de gestion IAM
+par mois.
+
+\begin{center}
+\renewcommand{\arraystretch}{1.3}
+{\small
+\begin{tabularx}{\linewidth}{l X r}
+\toprule
+\textbf{Service AWS} & \textbf{Base de calcul} & \textbf{Est./mois} \\
+\midrule
+AWS CloudTrail & 50k événements de gestion IAM à \$2,00 / 100k & \$1,00 \\
+Amazon EventBridge & Événements AWS sur le bus par défaut (sans frais) & \$0,00 \\
+AWS Lambda & 50k requêtes, 128\,Mo, \textasciitilde{}400\,ms & \$0,05 \\
+Amazon SNS & 50k publications + \textasciitilde{}500 envois e-mail & \$0,04 \\
+Amazon S3 & \textasciitilde{}10\,Go de stockage, \textasciitilde{}55k requêtes PUT/GET & \$0,51 \\
+Amazon CloudWatch & 3 métriques personnalisées, 2 alarmes, 50k \texttt{PutMetricData}, \textasciitilde{}1\,Go de logs & \$2,13 \\
+Transfert de données & Intra-région + trafic sortant minimal & \$0,09 \\
+\midrule
+\textbf{Total estimé} & & \textbf{\$3,82} \\
+\bottomrule
+\end{tabularx}
+}
+\end{center}
+
+Soit environ 3,82~\$ par mois (près de 46~\$ par an). Ce coût varie
+essentiellement avec le volume d'événements IAM : de l'ordre de 2~\$ par mois
+pour une activité faible (5k événements), 4~\$ pour une activité modérée (50k)
+et 24~\$ pour une activité intense (500k). Le poste principal est Amazon
+CloudWatch (métriques personnalisées et un appel \texttt{PutMetricData} par
+événement) ; regrouper les publications de métriques permettrait de le réduire
+encore. Dans le cadre de l'offre gratuite AWS, la plupart des lignes tombent à
+0~\$ et le total devient négligeable. Les implémentations Bash et Terraform
+provisionnant les mêmes ressources, elles présentent le même profil de coût.
+
 \section{Avantages de l'approche idempotente}
 
 L'idempotence recherchée dans les deux implémentations présente un intérêt opérationnel concret : un même script ou une même configuration peut être exécuté à plusieurs reprises sans provoquer d'erreur ni de duplication de ressources, ce qui facilite les itérations de développement, les corrections successives et la reproductibilité du déploiement sur un nouveau compte AWS.
@@ -638,6 +686,10 @@ Propagation IAM différée lors de la création de la Lambda ; maintien de la st
 
 \begin{keybox}{Résultats}
 Cycle complet de provisionnement, vérification et désinstallation validé sur les deux implémentations ; documentation technique complète du projet.
+\end{keybox}
+
+\begin{keybox}{Coût d'exploitation}
+Architecture serverless facturée à l'usage : environ 3,82~\$ par mois aux tarifs standards hors offre gratuite (près de 46~\$ par an), dominé par Amazon CloudWatch ; négligeable dans le cadre de l'offre gratuite AWS.
 \end{keybox}
 
 \begin{keybox}{Limites}

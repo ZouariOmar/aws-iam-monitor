@@ -7,3 +7,4 @@
   overview
   architecture
   features
+  cost
