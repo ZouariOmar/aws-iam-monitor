@@ -1,5 +1,22 @@
 # Changelog
 
+## [1.2.1] - 2026-08-28
+
+### Documentation
+
+- _(github)_ Add issue #15
+- Add project documentation and generated PDFs
+- _(rapport)_ Add `vermeg`, `esprit` logos to `journal`, `repport`
+- Add AWS cost estimates to project reports
+- Add project presentation slides
+- _(docapi)_ Add AWS cost estimate documentation
+- _(readme)_ Document AWS operating costs
+
+### Miscellaneous Tasks
+
+- _(github)_ Move GitHub contribution templates to `.github/`
+- _(docs)_ Add LaTeX PDF generation
+
 ## [1.2.0] - 2026-08-18
 
 ### Features
@@ -14,6 +31,7 @@
 ### Refactor
 
 - _(bash)_ Move Bash tooling into subdirectory
+- _(docker)_ Add project-specific Docker configurations
 
 ### Documentation
 
@@ -25,6 +43,7 @@
 ### Miscellaneous Tasks
 
 - _(release)_ V1.2.0
+- _(cliff)_ Configure release tooling & update changelog
 
 ## [1.1.0] - 2026-08-15
 
