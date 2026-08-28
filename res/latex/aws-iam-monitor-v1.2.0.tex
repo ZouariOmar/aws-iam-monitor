@@ -349,6 +349,47 @@ documents (\texttt{DevPolicy}, \texttt{ProdPolicy}, \texttt{AuditPolicy},
 identical between both implementations.
 \end{notebox}
 
+\section{Cost Estimate}
+
+Both implementations provision the same resources and therefore share the same
+cost profile. The figures below are modeled with the AWS Pricing Calculator
+(\texttt{calculator.aws}), Region US East (N.\ Virginia), at standard on-demand
+rates with the AWS Free Tier \emph{not} applied, for a baseline of roughly
+50{,}000 IAM management events per month.
+
+\begin{center}
+\renewcommand{\arraystretch}{1.3}
+{\small
+\begin{tabularx}{\linewidth}{l X r}
+\toprule
+\textbf{AWS service} & \textbf{Basis} & \textbf{Est./mo} \\
+\midrule
+AWS CloudTrail & 50k IAM management events @ \$2.00 / 100k & \$1.00 \\
+Amazon EventBridge & AWS service events on the default bus (no charge) & \$0.00 \\
+AWS Lambda & 50k requests, 128\,MB, \textasciitilde{}400\,ms (\textasciitilde{}2{,}500 GB-s) & \$0.05 \\
+Amazon SNS & 50k publishes + \textasciitilde{}500 email deliveries & \$0.04 \\
+Amazon S3 & \textasciitilde{}10\,GB storage, \textasciitilde{}55k PUT/GET & \$0.51 \\
+Amazon CloudWatch & 3 custom metrics, 2 alarms, 50k \texttt{PutMetricData}, \textasciitilde{}1\,GB logs & \$2.13 \\
+Data transfer & Intra-region + minimal internet egress & \$0.09 \\
+\midrule
+\textbf{Estimated total} & & \textbf{\$3.82} \\
+\bottomrule
+\end{tabularx}
+}
+\end{center}
+
+That is approximately \$3.82 per month (\textasciitilde{}\$46 per year). Cost
+scales almost entirely with the IAM event volume: a light workload
+(5k events/mo) costs about \$2, a moderate one (50k) about \$4, and a heavy one
+(500k) about \$24 per month.
+
+\begin{notebox}[Note]
+Amazon CloudWatch dominates the bill (custom metrics plus one
+\texttt{PutMetricData} call per event); batching metric publishes reduces it
+further. Within the AWS Free Tier most line items fall to \$0 and the effective
+total is negligible.
+\end{notebox}
+
 % ======================= CHAPTER: INSTALLATION =======================
 \chapter{Installation}
 
